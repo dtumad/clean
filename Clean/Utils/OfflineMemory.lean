@@ -121,6 +121,11 @@ instance : Std.Antisymm timestamp_ordering := by
   simp only [timestamp_ordering] at hab hba
   linarith
 
+instance (x y : MemoryAccess) : Decidable (timestamp_ordering x y) := by
+  obtain ⟨t2, _, _, _⟩ := x
+  obtain ⟨t1, _, _, _⟩ := y
+  exact Nat.decLt t1 t2
+
 instance : Std.Irrefl timestamp_ordering := by
   constructor
   intros a ha
@@ -275,7 +280,7 @@ example : MemoryAccessList.isConsistentOnline [
   (2, 0, 42, 44),
   (3, 2, 0, 45),
   (4, 1, 43, 46)
-].reverse (by simp [MemoryAccessList.isTimestampSorted]):= by
+].reverse (by simp [MemoryAccessList.isTimestampSorted]; decide):= by
   simp_all [MemoryAccessList.isConsistentOnline, MemoryAccessList.lastWriteValue]
 
 example : ¬ MemoryAccessList.isConsistentOnline [
@@ -284,7 +289,7 @@ example : ¬ MemoryAccessList.isConsistentOnline [
   (2, 0, 43, 44), -- inconsistent read
   (3, 2, 0, 45),
   (4, 1, 43, 46)
-].reverse (by simp [MemoryAccessList.isTimestampSorted]):= by
+].reverse (by simp [MemoryAccessList.isTimestampSorted]; decide):= by
   simp_all [MemoryAccessList.isConsistentOnline, MemoryAccessList.lastWriteValue]
 
 /--
@@ -311,6 +316,7 @@ theorem MemoryAccessList.filterAddress_cons (head : MemoryAccess) (tail : Memory
         else (MemoryAccessList.filterAddress tail addr))) := by
   obtain ⟨_t, a, _r, _w⟩ := head
   simp [filterAddress, List.filter_cons]
+  split_ifs <;> rfl
 
 /--
   A memory access list is consistent for a single address if the reads and writes to that address are consistent.

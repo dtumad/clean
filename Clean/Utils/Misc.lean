@@ -59,11 +59,6 @@ theorem Fin.foldl_const (n : ℕ) (f : Fin n → α) (init : α) :
     | n + 1 => f (.last n) := by
   split <;> simp [foldl_const_succ]
 
-lemma Fin.foldl_eq_foldl_finRange (n : ℕ) (f : α → Fin n → α) (init : α) :
-    Fin.foldl n f init = (List.finRange n).foldl f init := by
-  induction n generalizing init with
-  | zero => aesop
-  | succ n ih =>
-    simp only [Fin.foldl_succ, List.finRange_succ, List.foldl_cons]
-    specialize ih (fun x i => f x i.succ) (f init 0)
-    rw [ih, List.foldl_map]
+-- `Fin.foldl_eq_foldl_finRange` is upstream in `Batteries.Data.Fin.Fold`
+-- (Lean 4.29+). Removed here to avoid a duplicate-declaration collision when
+-- Clean is imported alongside Batteries-using projects (e.g. sp1-lean).
