@@ -63,13 +63,9 @@ instance elaborated [DecidableEq F] : ElaboratedCircuit F (Inputs M) M where
 
 theorem soundness [DecidableEq F] : Soundness F (elaborated (F:=F) (M:=M)) Assumptions Spec := by
   circuit_proof_start [output]
-  rcases input with ⟨selector, ifTrue, ifFalse⟩
-  reduce at h_input
-  have ⟨h_selector, h_ifTrue, h_ifFalse⟩ :
-      Expression.eval env input_var.1 = selector
-      ∧ eval env input_var.2 = ifTrue
-      ∧ eval env input_var.3 = ifFalse := by
-    rw [← Inputs.mk.injEq]; exact h_input
+  rcases input
+  simp only [Inputs.mk.injEq] at h_input
+  rcases h_input with ⟨h_selector, h_ifTrue, h_ifFalse⟩
   simp only at h_assumptions
 
   -- Show that the result equals the conditional expression
@@ -77,8 +73,7 @@ theorem soundness [DecidableEq F] : Soundness F (elaborated (F:=F) (M:=M)) Assum
   intro i hi
   rw [ProvableType.eval_fromElements]
   rw [ProvableType.toElements_fromElements, Vector.getElem_map, Vector.getElem_ofFn]
-  simp only [Expression.eval, ProvableType.getElem_eval_toElements,
-    h_selector, h_ifTrue, h_ifFalse]
+  simp only [Expression.eval, ProvableType.getElem_eval_toElements, h_selector, h_ifTrue, h_ifFalse]
 
   -- Case split on the selector value
   cases h_assumptions with
