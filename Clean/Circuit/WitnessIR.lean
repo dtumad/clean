@@ -255,6 +255,43 @@ private partial def isOmegaFact (ty : Expr) : MetaM Bool := do
   | _ => return false
 
 /--
+Does `e`'s own shape put a bound on it, with no hypotheses needed?
+
+`omega` knows `x % k < k`, `UInt64.toNat x < 2 ^ 64`, `Fin.val i < n` and so on
+intrinsically, so a goal can close with an empty context. This recognises that class
+syntactically: a term built from literals and bounded formers by `+`, `*`, `/`, `%`.
+
+Conservative in the safe direction — saying `false` only means "no free bound here", after
+which the local context still gets its say.
+-/
+private partial def structurallyBounded (e : Expr) : MetaM Bool := do
+  if (← natLit? e).isSome then return true
+  match e.getAppFnArgs with
+  | (``HMod.hMod, #[_, _, _, _, _, m]) => return (← natLit? m).isSome
+  | (``HDiv.hDiv, #[_, _, _, _, a, _]) => structurallyBounded a
+  | (``HAdd.hAdd, #[_, _, _, _, a, b]) =>
+    return (← structurallyBounded a) && (← structurallyBounded b)
+  | (``HMul.hMul, #[_, _, _, _, a, b]) =>
+    return (← structurallyBounded a) && (← structurallyBounded b)
+  | (``HSub.hSub, #[_, _, _, _, a, _]) => structurallyBounded a
+  | (``UInt64.toNat, _) | (``UInt32.toNat, _)
+  | (``UInt16.toNat, _) | (``UInt8.toNat, _) | (``Fin.val, _) => return true
+  | _ => return false
+
+/-- Does some local hypothesis `omega` can consume mention a free variable of `n`? -/
+private def hasRelevantHypothesis (n : Expr) : MetaM Bool := do
+  let n ← instantiateMVars n
+  unless n.hasFVar do return false
+  let nFVars := (Lean.collectFVars {} n).fvarSet
+  for decl in (← getLCtx) do
+    if decl.isImplementationDetail then continue
+    let ty ← instantiateMVars decl.type
+    unless ← isProp ty do continue
+    unless ← isOmegaFact ty do continue
+    if (Lean.collectFVars {} ty).fvarSet.any (nFVars.contains ·) then return true
+  return false
+
+/--
 The local hypotheses worth handing to `omega`: those it can actually consume.
 
 `u64Wrap` is in `circuit_norm` globally, so every `% 2^64` subterm of every circuit proof
@@ -306,6 +343,9 @@ private def u64WrapSimproc (e : Expr) : SimpM Simp.Step := do
   unless (← whnfR (← inferType n)).isConstOf ``Nat do return .continue
   let some mVal ← natLit? m | return .continue
   unless mVal == 18446744073709551616 || mVal == 64 do return .continue
+  -- Cheap screen before any `omega` machinery is built: a bound must come either from `n`'s
+  -- own shape or from a hypothesis omega can read. With neither, the call is doomed.
+  unless (← structurallyBounded n) || (← hasRelevantHypothesis n) do return .continue
   let g ← mkFreshExprMVar (← mkAppM ``LT.lt #[n, m])
   try
     let some g' ← g.mvarId!.falseOrByContra | return .continue
