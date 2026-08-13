@@ -234,6 +234,52 @@ private partial def natLit? (e : Expr) : MetaM (Option ℕ) := do
     if k ≤ 64 && b ≤ 64 then return some (b ^ k)
   return none
 
+/-- Is `ty` a fact `omega` can actually consume — a comparison, equation or divisibility at
+`ℕ`/`ℤ`, possibly under the connectives omega understands? -/
+private partial def isOmegaFact (ty : Expr) : MetaM Bool := do
+  let isNatOrInt (α : Expr) : MetaM Bool := do
+    let α ← whnfR α
+    return α.isConstOf ``Nat || α.isConstOf ``Int
+  match ty.getAppFnArgs with
+  | (``Not, #[p]) => isOmegaFact p
+  | (``And, #[p, q]) => return (← isOmegaFact p) || (← isOmegaFact q)
+  | (``Or, #[p, q]) => return (← isOmegaFact p) || (← isOmegaFact q)
+  | (``Iff, #[p, q]) => return (← isOmegaFact p) || (← isOmegaFact q)
+  | (``Eq, #[α, _, _]) => isNatOrInt α
+  | (``Ne, #[α, _, _]) => isNatOrInt α
+  | (``LT.lt, #[α, _, _, _]) => isNatOrInt α
+  | (``LE.le, #[α, _, _, _]) => isNatOrInt α
+  | (``GT.gt, #[α, _, _, _]) => isNatOrInt α
+  | (``GE.ge, #[α, _, _, _]) => isNatOrInt α
+  | (``Dvd.dvd, #[α, _, _, _]) => isNatOrInt α
+  | _ => return false
+
+/--
+The local hypotheses worth handing to `omega`: those it can actually consume.
+
+`u64Wrap` is in `circuit_norm` globally, so every `% 2^64` subterm of every circuit proof
+invokes `omega`, and the *failure* path is the expensive one. Passing `getLocalHyps`
+wholesale makes that cost scale with the ambient context: inside a chip proof that is 40+
+hypotheses carrying whole-circuit terms, every one of which omega must traverse only to
+discard. Screening them by shape first leaves omega the same arithmetic to reason with and
+a far smaller problem to parse.
+
+Note what this deliberately does *not* do: it does not skip the `omega` call when no
+hypothesis looks useful. An earlier version did, on the theory that a bound must come from
+a hypothesis — which is false, and the test suite said so. `omega` derives bounds from a
+term's own structure (`x % k < k`, `UInt64.toNat x < 2 ^ 64`, `Fin.val i < n`), so a goal
+with no relevant hypotheses at all can still be closed. Only the *input* is filtered here;
+what is derivable is unchanged.
+-/
+private def omegaFacts : MetaM (List Expr) := do
+  let mut facts := #[]
+  for decl in (← getLCtx) do
+    if decl.isImplementationDetail then continue
+    let ty ← instantiateMVars decl.type
+    unless ← isProp ty do continue
+    if ← isOmegaFact ty then facts := facts.push decl.toExpr
+  return facts.toList
+
 /--
 Erase a `u64` wrap that provably does not wrap.
 
@@ -248,6 +294,9 @@ This simproc closes exactly that gap: on `n % 2^64` / `n % 64` it asks `omega` (
 local hypotheses as facts) whether `n` is already below the modulus, and rewrites to `n`
 when it is. Other moduli are left alone, so ordinary `% 256`-style specification
 arithmetic is untouched.
+
+`omegaFacts` narrows what is handed to `omega`; it is a performance guard, not a semantic
+one, and does not change which goals close. See its docstring.
 -/
 private def u64WrapSimproc (e : Expr) : SimpM Simp.Step := do
   unless e.isAppOfArity ``HMod.hMod 6 do return .continue
@@ -260,7 +309,7 @@ private def u64WrapSimproc (e : Expr) : SimpM Simp.Step := do
   let g ← mkFreshExprMVar (← mkAppM ``LT.lt #[n, m])
   try
     let some g' ← g.mvarId!.falseOrByContra | return .continue
-    g'.withContext do Lean.Elab.Tactic.Omega.omega (← getLocalHyps).toList g'
+    g'.withContext do Lean.Elab.Tactic.Omega.omega (← omegaFacts) g'
   catch _ =>
     return .continue
   return .done { expr := n, proof? := ← mkAppM ``Nat.mod_eq_of_lt #[g] }
