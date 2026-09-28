@@ -1,4 +1,4 @@
-import Clean.Utils.Test.TestConstruction
+import Clean.Utils.Test.TestConstructionEnsemble
 
 open Examples.Construction TestConstruction
 
@@ -47,3 +47,22 @@ open Examples.Construction TestConstruction
 #print axioms readRow_reference
 #print axioms data_needs_agreement
 #print axioms hint_needs_agreement
+
+#check @Air.Flat.Ensemble.build_constraints
+#print axioms Air.Flat.Ensemble.build_constraints
+#check @Air.Flat.Ensemble.build_interactions
+#print axioms Air.Flat.Ensemble.build_interactions
+#check @receipt_row_ledger
+#print axioms receipt_row_ledger
+#check @buildReads_constraints
+#print axioms buildReads_constraints
+#check @buildReads_ledger
+#print axioms buildReads_ledger
+#check @buildReads_balanced
+#print axioms buildReads_balanced
+#check @buildReads_statement
+#print axioms buildReads_statement
+#check @TestConstructionEnsemble.fixture_statement
+#print axioms TestConstructionEnsemble.fixture_statement
+#check @TestConstructionEnsemble.receipt_constraints
+#print axioms TestConstructionEnsemble.receipt_constraints

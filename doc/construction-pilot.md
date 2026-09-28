@@ -66,9 +66,19 @@ The generic builders retain their field polymorphism and names. They now consume
 `ComputableWitnesses` evidence. Existing generator calls retain empty data by default;
 data-aware calls supply `(data:=data)` explicitly. New layout
 normalization rules use Clean's `circuit_norm` set rather than extending the global simp set.
-The examples have no channel interactions. The retained `Table.buildHinted_interactions`
-theorem characterizes the physical interaction list; this pilot makes no assembled-balance
-or whole-machine completeness claim.
+`Ensemble.RowInputs` indexes typed semantic inputs and hints by each registered component.
+`Ensemble.build` constructs tables sharing one fixed data environment and the public verifier.
+`Ensemble.build_constraints` proves their raw checks; `Ensemble.build_interactions` exposes their
+complete ledger, including the verifier. Channel balance remains a separate obligation.
+
+`ConstructionEnsemble.buildReads_statement` discharges that obligation for a concrete composition:
+a receipt reader invokes the bundled memory reader and publishes its result; a public verifier
+consumes two requested address/value pairs; an independent Boolean table uses row-local hints.
+The proof derives the actual four-entry receipt ledger and its characteristic bound (4 < 97).
+`TestConstructionEnsemble.fixture_statement` discharges all semantic premises for the boundary
+reads and mixed Boolean hints. Thirteen additional regressions evaluate actual physical operations,
+including rejection of missing, duplicate, or corrupted receipts and wrong public values.
+This proves explicit assembly completeness for the example, not whole-machine completeness.
 
 ## Regressions and reproduction
 
@@ -99,7 +109,7 @@ bash scripts/check-construction-pilot.sh
 The runner builds `Clean` and the new regression module with warnings treated as errors. It
 also builds all of `CleanTests`; the pinned upstream `TestCircuitProofStart` contains ten
 deliberately unfinished tactic smoke tests, so this target allows only their exact existing
-`sorry` diagnostics and verifies that file is unchanged. The pilot's 21 audited statements
+`sorry` diagnostics and verifies that file is unchanged. The construction suite's 30 audited statements
 depend only on `propext`, `Classical.choice`, and `Quot.sound`. The runner requires the
 backend test tools, rejects skipped backend tests, runs all construction cases, prints literal
 types/definitions and axiom reports, checks the production import closure, and runs Clean's

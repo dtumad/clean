@@ -1,4 +1,4 @@
-import Clean.Examples.Construction
+import Clean.Examples.ConstructionEnsemble
 
 open Lean in
 run_cmd do

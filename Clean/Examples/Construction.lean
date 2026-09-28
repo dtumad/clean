@@ -66,7 +66,7 @@ def memoryReader : GeneralFormalCircuit Fp field field where
       (Array.getElem?_eq_getElem h_index))
 
 /-- The memory reader as a physical flat-AIR component. -/
-def memoryComponent : Air.Flat.Component Fp := ⟨memoryReader⟩
+@[reducible] def memoryComponent : Air.Flat.Component Fp := ⟨memoryReader⟩
 
 /-- The memory witness only depends on the input address and the fixed data. -/
 theorem memory_computable : memoryComponent.circuit.base.ComputableWitnesses := by
@@ -110,7 +110,7 @@ def booleanChoice : GeneralFormalCircuit Fp unit field where
     simp_all [circuit_norm]
 
 /-- The Boolean choice as a physical component with no constrained input cells. -/
-def booleanComponent : Air.Flat.Component Fp := ⟨booleanChoice⟩
+@[reducible] def booleanComponent : Air.Flat.Component Fp := ⟨booleanChoice⟩
 
 /-- The Boolean witness depends on the hint channel, which strengthened agreement preserves. -/
 theorem boolean_computable : booleanComponent.circuit.base.ComputableWitnesses := by

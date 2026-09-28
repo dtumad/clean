@@ -1,4 +1,4 @@
-import Clean.Utils.Test.TestConstruction
+import Clean.Utils.Test.TestConstructionEnsemble
 
 open Examples.Construction TestConstruction
 
@@ -10,3 +10,4 @@ def main : IO Unit := do
   IO.println s!"changed-memory-first={(readRow 0 (data:=changedMemory)).map ZMod.val}"
   IO.println s!"mixed-hint-rows={mixedTable.table.map (·.map ZMod.val)}"
   TestConstruction.run
+  TestConstructionEnsemble.run

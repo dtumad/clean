@@ -41,7 +41,7 @@ run() {
 }
 
 : > "$out/commands.txt"
-run build lake build --no-cache --wfail Clean Clean.Utils.Test.TestConstruction
+run build lake build --no-cache --wfail Clean Clean.Utils.Test.TestConstruction Clean.Utils.Test.TestConstructionEnsemble
 run tests lake build --no-cache CleanTests
 if grep -q 'SKIP:' "$out/build.log" "$out/tests.log"; then
   echo "A cached or fresh backend test was skipped; rerun that test with tools available." >&2
@@ -75,13 +75,13 @@ import sys
 
 reports = re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]",
                      pathlib.Path(sys.argv[1]).read_text())
-if len(reports) != 21:
-    sys.exit(f"Expected 21 axiom reports, found {len(reports)}")
+if len(reports) != 30:
+    sys.exit(f"Expected 30 axiom reports, found {len(reports)}")
 for name, axioms in reports:
     unexpected = set(axioms.split(", ")) - {"propext", "Classical.choice", "Quot.sound"}
     if unexpected:
         sys.exit(f"Unexpected axioms for {name}: {unexpected}")
-print("PASS: 21 construction statements use only standard logical axioms")
+print("PASS: 30 construction statements use only standard logical axioms")
 PY
 run imports lake env lean scripts/constructionImports.lean
 run style python3 scripts/check-consecutive-empty-lines.py

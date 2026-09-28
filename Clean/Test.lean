@@ -11,3 +11,4 @@ public import Clean.Utils.Test.TestMixedCircuitType
 public import Clean.Backends.Circom.TestWasmCompile
 public import Clean.Backends.Circom.TestWasmSemantics
 public import Clean.Utils.Test.TestConstruction
+public import Clean.Utils.Test.TestConstructionEnsemble
