@@ -108,25 +108,30 @@ theorem empty_fixture_valid :
 
 /-- The list-backed reference interpreter for the reader's actual witness operations. -/
 def referenceReadRow (address : Fp) (data : ProverData Fp) : Array Fp :=
-  (FlatOperation.dynamicWitnessesWithData memoryComponent.rowOperations.toFlat
+  (FlatOperation.dynamicWitnesses memoryComponent.rowOperations.toFlat
     (data:=data) (hint:=ProverHint.empty Fp) [address]).toArray
+
+/-- The original empty-data calling convention retains its behavior. -/
+example (hint : ProverHint Fp) (ops : List (FlatOperation Fp)) (input : Array Fp) :
+    FlatOperation.witgen hint ops input =
+      FlatOperation.witgen hint ops input (data:=fun _ _ => #[]) := rfl
 
 /-- This consumer instantiates the generic array/list agreement at the same data and hint. -/
 theorem readRow_reference (address : Fp) (data : ProverData Fp) :
     readRow address (data:=data) = referenceReadRow address (data:=data) :=
-  FlatOperation.witgenWithData_eq_dynamicWitnessesWithData data (ProverHint.empty Fp)
-    memoryComponent.rowOperations.toFlat #[address]
+  FlatOperation.witgen_eq_dynamicWitnesses (ProverHint.empty Fp)
+    memoryComponent.rowOperations.toFlat #[address] (data:=data)
 
 /-- Cell equality alone cannot establish equality of data-reading witness programs. -/
 theorem data_needs_agreement : ∃ env env' : ProverEnvironment Fp,
     env.get = env'.get ∧
     (Witgen.WitgenIR.ofFExpr (.dataGet "memory" 2 (.const 0) 1)).eval env ≠
       (Witgen.WitgenIR.ofFExpr (.dataGet "memory" 2 (.const 0) 1)).eval env' := by
-  refine ⟨.fromArrayWithData #[] (data:=memory) (hint:=ProverHint.empty Fp),
-    .fromArrayWithData #[] (data:=changedMemory) (hint:=ProverHint.empty Fp), rfl, ?_⟩
+  refine ⟨.fromArray #[] (data:=memory) (hint:=ProverHint.empty Fp),
+    .fromArray #[] (data:=changedMemory) (hint:=ProverHint.empty Fp), rfl, ?_⟩
   intro h
   have h_value := congrArg (fun values : Vector Fp 1 => values[0]) h
-  simp only [circuit_norm, ProverEnvironment.fromArrayWithData, memory, changedMemory,
+  simp only [circuit_norm, ProverEnvironment.fromArray, memory, changedMemory,
     keyedRows] at h_value
   change (11 : Fp) = 12 at h_value
   exact (by decide : (11 : Fp) ≠ 12) h_value
@@ -136,11 +141,11 @@ theorem hint_needs_agreement : ∃ env env' : ProverEnvironment Fp,
     env.get = env'.get ∧
     (Witgen.WitgenIR.ofFExpr (.hintGet "choice" 1 (.const 0) 0)).eval env ≠
       (Witgen.WitgenIR.ofFExpr (.hintGet "choice" 1 (.const 0) 0)).eval env' := by
-  refine ⟨.fromArrayWithData #[] (data:=memory) (hint:=choiceHint 0),
-    .fromArrayWithData #[] (data:=memory) (hint:=choiceHint 1), rfl, ?_⟩
+  refine ⟨.fromArray #[] (data:=memory) (hint:=choiceHint 0),
+    .fromArray #[] (data:=memory) (hint:=choiceHint 1), rfl, ?_⟩
   intro h
   have h_value := congrArg (fun values : Vector Fp 1 => values[0]) h
-  simp only [circuit_norm, ProverEnvironment.fromArrayWithData, choiceHint,
+  simp only [circuit_norm, ProverEnvironment.fromArray, choiceHint,
     keyedRows] at h_value
   change (0 : Fp) = 1 at h_value
   exact zero_ne_one h_value
@@ -180,6 +185,16 @@ def outcomes : List (String × Bool × Bool) :=
    ("alternative-boolean-witness", true, checkChoice ((choiceRow 0).set! 0 1)),
    ("short-boolean-row", false, checkChoice #[]),
    ("long-boolean-row", false, checkChoice #[0, 1]),
+   ("filtered-reader", true,
+     FlatOperation.witgen (ProverHint.empty Fp)
+       (FlatOperation.witnessOperationsOnly memoryComponent.rowOperations.toFlat)
+       #[2] (data:=memory) == readRow 2 (data:=memory)),
+   ("legacy-empty-data", true,
+     FlatOperation.witgen (ProverHint.empty Fp) [] #[7] == #[7]),
+   ("unrelated-data-key", true,
+     checkRead (readRow 0 (data:=memory))
+       (data:=fun key width => if key = "unrelated" then #[Vector.replicate width 9]
+         else memory key width)),
    ("empty-table", true,
      (Air.Flat.Table.buildHinted booleanComponent [] (data:=memory)).table.isEmpty)]
 

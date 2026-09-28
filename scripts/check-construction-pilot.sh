@@ -75,13 +75,13 @@ import sys
 
 reports = re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]",
                      pathlib.Path(sys.argv[1]).read_text())
-if len(reports) != 20:
-    sys.exit(f"Expected 20 axiom reports, found {len(reports)}")
+if len(reports) != 21:
+    sys.exit(f"Expected 21 axiom reports, found {len(reports)}")
 for name, axioms in reports:
     unexpected = set(axioms.split(", ")) - {"propext", "Classical.choice", "Quot.sound"}
     if unexpected:
         sys.exit(f"Unexpected axioms for {name}: {unexpected}")
-print("PASS: 20 construction statements use only standard logical axioms")
+print("PASS: 21 construction statements use only standard logical axioms")
 PY
 run imports lake env lean scripts/constructionImports.lean
 run style python3 scripts/check-consecutive-empty-lines.py

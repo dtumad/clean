@@ -1,11 +1,13 @@
-# Proved construction: a Clean-only adoption example
+# Proved construction: Clean-native consumers
 
 A memory read and a Boolean choice now consume the data-aware witness and physical row/table
-construction proofs in Clean alone. A caller supplies semantic inputs, fixed prover data, and
+construction proofs in Clean alone. The original additive pilot is preserved at
+`9414b02f`; this branch generalizes the canonical `AgreesBelow`, list interpreter, and
+array interpreter instead of keeping duplicate `WithData` implementations. A caller supplies semantic inputs, fixed prover data, and
 each row's hint; the generic construction returns rows whose actual circuit checks are proved.
 
 The baseline is Clean `fba2a29f5e36420d797c1de118ac9f11f23b819e`, Lean `v4.33.1`, with the
-unchanged dependency manifest. The three construction modules were ported from
+unchanged dependency manifest. The construction proofs originated in
 dtumad/sp1-lean `27148217a89510bddd26eb27c0b44657cb4e0441`. Those source modules are identical
 at fork main `c286859028977f34a9b1485748203d5028a30bac`; other fork and presentation changes
 are not dependencies of this example. Talk reference: `03cdb3f5ee1b4b1006b9969c50f13cc55a09ee94`.
@@ -60,7 +62,9 @@ the premises for hints 0, 1, 0 and proves the resulting physical table valid. Th
 also has a theorem. All fixtures and counterexamples use kernel proofs; execution results
 are additional checks, not proof assumptions.
 
-The public generic interfaces retain their field polymorphism and names. New layout
+The generic builders retain their field polymorphism and names. They now consume canonical
+`ComputableWitnesses` evidence. Existing generator calls retain empty data by default;
+data-aware calls supply `(data:=data)` explicitly. New layout
 normalization rules use Clean's `circuit_norm` set rather than extending the global simp set.
 The examples have no channel interactions. The retained `Table.buildHinted_interactions`
 theorem characterizes the physical interaction list; this pilot makes no assembled-balance
@@ -69,14 +73,14 @@ or whole-machine completeness claim.
 ## Regressions and reproduction
 
 [`TestConstruction`](../Clean/Utils/Test/TestConstruction.lean) proves that its executable
-checkers are equivalent to row width plus the components' raw `ConstraintsHold`. Its 26 cases
+checkers are equivalent to row width plus the components' raw `ConstraintsHold`. Its 29 cases
 exercise:
 
 | Obligation | Cases |
 |---|---|
 | Actual indexed lookup | First/last addresses; corrupted value; invalid address; empty memory; wrong stored address |
-| Data dependency | Regenerated row accepts changed data; old row rejects; input cells agree while witnesses differ |
-| Construction | Read table, empty table, input layout, array/list agreement on first/last reads |
+| Data dependency | Regenerated row accepts changed data; old row rejects; input cells agree while witnesses differ; unrelated data keys do not change lookup acceptance |
+| Construction | Read table, empty table, input layout, array/list agreement on first/last reads, witness-only filtering, legacy empty-data calls |
 | Row-local hints | Individual 0/1 hints, one mixed-hint table, non-Boolean hint/output rejection |
 | Accepted witness freedom | A valid alternative Boolean value accepts |
 | Physical layout | Short and long rows reject for both components |
@@ -95,7 +99,7 @@ bash scripts/check-construction-pilot.sh
 The runner builds `Clean` and the new regression module with warnings treated as errors. It
 also builds all of `CleanTests`; the pinned upstream `TestCircuitProofStart` contains ten
 deliberately unfinished tactic smoke tests, so this target allows only their exact existing
-`sorry` diagnostics and verifies that file is unchanged. The pilot's 20 audited statements
+`sorry` diagnostics and verifies that file is unchanged. The pilot's 21 audited statements
 depend only on `propext`, `Classical.choice`, and `Quot.sound`. The runner requires the
 backend test tools, rejects skipped backend tests, runs all construction cases, prints literal
 types/definitions and axiom reports, checks the production import closure, and runs Clean's
@@ -113,13 +117,13 @@ silently combined into its dependency graph.
 
 | Pending work | Head | Migration |
 |---|---|---|
-| [#450](https://github.com/Verified-zkEVM/clean/pull/450) | `8301b77a` | Strengthened agreement can replace the additive agreement predicate and corresponding computability adapters once the consumers agree on its API. Data-aware interpretation and table construction still need their own connection. |
+| [#450](https://github.com/Verified-zkEVM/clean/pull/450) | `8301b77a` | The canonical agreement change is adapted here, with its existing attribution; no competing predicate family remains. |
 | [#426](https://github.com/Verified-zkEVM/clean/pull/426) | `da62df69` | Reuse bundled computability evidence instead of retaining a parallel long-term predicate family. |
 | [#448](https://github.com/Verified-zkEVM/clean/pull/448) | `7efc1af2` | Reconcile the strengthened predicates with the compositional laws on its #426-based branch. |
 | [#446](https://github.com/Verified-zkEVM/clean/pull/446) | `89e9abec` | Connect its private data-aware row interpreter to the proved interpreter; preserve inputs, data, and row hints. |
 
 For #446, the proposed row-level bridge is equality between its `witgenWithData data hint ops
-input` and `FlatOperation.witgenWithData data hint ops input`. Their folds use the same witness
+input` and `FlatOperation.witgen hint ops input (data:=data)`. Their folds use the same witness
 evaluation and append operation. Its `PreparedComponent.witgenOps` filters out non-witness
 operations; the proof bridge must account for that filtering and the same input-cell layout.
 

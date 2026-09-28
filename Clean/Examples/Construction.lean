@@ -69,8 +69,8 @@ def memoryReader : GeneralFormalCircuit Fp field field where
 def memoryComponent : Air.Flat.Component Fp := ⟨memoryReader⟩
 
 /-- The memory witness only depends on the input address and the fixed data. -/
-theorem memory_computable : memoryComponent.circuit.base.ComputableWitnessesWithData := by
-  change memoryReader.base.ComputableWitnessesWithData
+theorem memory_computable : memoryComponent.circuit.base.ComputableWitnesses := by
+  change memoryReader.base.ComputableWitnesses
   intro n input env env'
   simp only [memoryReader, circuit_norm, Operations.forAllFlat]
   intro h_agree h_input
@@ -113,8 +113,8 @@ def booleanChoice : GeneralFormalCircuit Fp unit field where
 def booleanComponent : Air.Flat.Component Fp := ⟨booleanChoice⟩
 
 /-- The Boolean witness depends on the hint channel, which strengthened agreement preserves. -/
-theorem boolean_computable : booleanComponent.circuit.base.ComputableWitnessesWithData := by
-  change booleanChoice.base.ComputableWitnessesWithData
+theorem boolean_computable : booleanComponent.circuit.base.ComputableWitnesses := by
+  change booleanChoice.base.ComputableWitnesses
   intro n input env env'
   simp [booleanChoice, circuit_norm, Operations.forAllFlat,
     FormalAssertion.toSubcircuit, FlatOperation.forAll]

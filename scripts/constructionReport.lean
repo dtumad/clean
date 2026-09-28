@@ -2,8 +2,9 @@ import Clean.Utils.Test.TestConstruction
 
 open Examples.Construction TestConstruction
 
-#check @FlatOperation.witgenWithData_eq_dynamicWitnessesWithData
-#check @Circuit.witgenWithData_usesLocalWitnesses
+#check @FlatOperation.witgen_eq_dynamicWitnesses
+#check @FlatOperation.witgen_witnessOperationsOnly
+#check @Circuit.witgen_usesLocalWitnesses
 #check @Air.Flat.Component.buildRow_constraintsHold
 #check @Air.Flat.Component.buildRow_spec_requirements
 #check @Air.Flat.Table.buildHinted_constraints
@@ -25,8 +26,9 @@ open Examples.Construction TestConstruction
 #print ReadSpec
 #print hintValue
 
-#print axioms FlatOperation.witgenWithData_eq_dynamicWitnessesWithData
-#print axioms Circuit.witgenWithData_usesLocalWitnesses
+#print axioms FlatOperation.witgen_eq_dynamicWitnesses
+#print axioms FlatOperation.witgen_witnessOperationsOnly
+#print axioms Circuit.witgen_usesLocalWitnesses
 #print axioms Air.Flat.Component.buildRow_constraintsHold
 #print axioms Air.Flat.Component.buildRow_spec_requirements
 #print axioms Air.Flat.Table.buildHinted_constraints

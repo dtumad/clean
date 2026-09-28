@@ -414,25 +414,49 @@ theorem Witnessable.witnessIR_provableVector {m : ℕ} (α : TypeMap) [NonEmptyP
 -- witness generation
 
 /-- Build a `ProverEnvironment` from a witness list and a specific prover hint. -/
-def ProverEnvironment.fromList (witnesses : List F) (hint : ProverHint F) : ProverEnvironment F where
+def ProverEnvironment.fromList (witnesses : List F) (hint : ProverHint F)
+    (data : ProverData F := fun _ _ => #[]) : ProverEnvironment F where
   get i := witnesses[i]?.getD 0
-  data _ _ := #[]
+  data
   hint
 
-def FlatOperation.dynamicWitness (hint : ProverHint F) (op : FlatOperation F) (acc : List F) : List F := match op with
-  | .witness _ compute => (compute.eval (.fromList acc hint)).toList
+def FlatOperation.dynamicWitness (hint : ProverHint F) (op : FlatOperation F) (acc : List F)
+    (data : ProverData F := fun _ _ => #[]) : List F := match op with
+  | .witness _ compute => (compute.eval (.fromList acc hint (data:=data))).toList
   | .assert _ => []
   | .lookup _ => []
   | .interact _ => []
 
-def FlatOperation.dynamicWitnesses (ops : List (FlatOperation F)) (hint : ProverHint F) (init : List F) : List F :=
-  ops.foldl (fun acc op => acc ++ op.dynamicWitness hint acc) init
+def FlatOperation.dynamicWitnesses (ops : List (FlatOperation F)) (hint : ProverHint F) (init : List F)
+    (data : ProverData F := fun _ _ => #[]) : List F :=
+  ops.foldl (fun acc op => acc ++ op.dynamicWitness hint acc (data:=data)) init
 
-def FlatOperation.proverEnvironment (ops : List (FlatOperation F)) (hint : ProverHint F) (init : List F) :=
-  ProverEnvironment.fromList (FlatOperation.dynamicWitnesses ops hint init) hint
+def FlatOperation.proverEnvironment (ops : List (FlatOperation F)) (hint : ProverHint F) (init : List F)
+    (data : ProverData F := fun _ _ => #[]) :=
+  ProverEnvironment.fromList (FlatOperation.dynamicWitnesses ops hint init (data:=data)) hint (data:=data)
 
+/-- Witnesses may read earlier cells, fixed prover data, and the row's hint. -/
 def ProverEnvironment.AgreesBelow (n : ℕ) (env env' : ProverEnvironment F) :=
-  ∀ i < n, env.get i = env'.get i
+  (∀ i < n, env.get i = env'.get i) ∧ env.data = env'.data ∧ env.hint = env'.hint
+
+namespace ProverEnvironment.AgreesBelow
+variable {n : ℕ} {env env' : ProverEnvironment F}
+
+omit [FiniteField F] in
+theorem get_eq (h : env.AgreesBelow n env') {i : ℕ} (hi : i < n) :
+    env.get i = env'.get i := h.1 i hi
+
+omit [FiniteField F] in
+theorem data_eq (h : env.AgreesBelow n env') : env.data = env'.data := h.2.1
+
+omit [FiniteField F] in
+theorem hint_eq (h : env.AgreesBelow n env') : env.hint = env'.hint := h.2.2
+
+end ProverEnvironment.AgreesBelow
+
+omit [FiniteField F] in
+theorem ProverEnvironment.agreesBelow_rfl (n : ℕ) (env : ProverEnvironment F) :
+    env.AgreesBelow n env := ⟨fun _ _ => rfl, rfl, rfl⟩
 
 def ProverEnvironment.OnlyAccessedBelow (n : ℕ) (f : ProverEnvironment F → α) :=
   ∀ env env', env.AgreesBelow n env' → f env = f env'
@@ -451,8 +475,10 @@ def Circuit.ComputableWitnesses (circuit : Circuit F α) (n : ℕ) :=
 If a circuit satisfies `computableWitnesses`, we can construct a concrete environment
 that satisfies `UsesLocalWitnesses`. (Proof in `Theorems`.)
 -/
-def Circuit.proverEnvironment (circuit : Circuit F α) (hint : ProverHint F) (init : List F := []) : ProverEnvironment F :=
-  .fromList (FlatOperation.dynamicWitnesses (circuit.operations init.length).toFlat hint init) hint
+def Circuit.proverEnvironment (circuit : Circuit F α) (hint : ProverHint F)
+    (init : List F := []) (data : ProverData F := fun _ _ => #[]) : ProverEnvironment F :=
+  .fromList (FlatOperation.dynamicWitnesses (circuit.operations init.length).toFlat hint init
+    (data:=data)) hint (data:=data)
 
 -- witness generators used for AIR trace export
 -- TODO unify with the definitions above

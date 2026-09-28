@@ -27,6 +27,11 @@ jobs:
         # affected checks print SKIP instead of failing.
         run: lake build CleanTests
 
+      - name: Validate construction proofs and regressions
+        run: |
+          npm install --prefix .lake/test-tools snarkjs@0.7.6 wabt@1.0.39
+          bash scripts/check-construction-pilot.sh
+
   plonky3-backend:
     runs-on: ubuntu-latest
     needs: build
