@@ -49,3 +49,4 @@ public import Clean.Backends.Circom.Ast
 public import Clean.Backends.Circom.Compile
 public import Clean.Backends.Circom.R1CS
 public import Clean.Air.TableBuild
+public import Clean.Examples.Construction
