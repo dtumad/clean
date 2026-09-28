@@ -12,6 +12,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The construction guard compares the unchanged tactic tests with the pinned baseline.
+          fetch-depth: 0
       - name: Check for consecutive empty lines
         run: python3 scripts/check-consecutive-empty-lines.py
       - name: Install snarkjs and wabt (wasm-validate / wasm2wat)
