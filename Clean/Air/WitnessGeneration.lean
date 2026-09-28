@@ -198,12 +198,8 @@ private structure PreparedComponent (F : Type) [FiniteField F] where
   witgenOps : List (FlatOperation F)
   interactions : List (AbstractInteraction F)
 
-private def witnessOperationsOnly : List (FlatOperation F) → List (FlatOperation F)
-  | [] => []
-  | operation :: operations =>
-      match operation with
-      | .witness _ _ => operation :: witnessOperationsOnly operations
-      | .assert _ | .lookup _ | .interact _ => witnessOperationsOnly operations
+private def witnessOperationsOnly (ops : List (FlatOperation F)) : List (FlatOperation F) :=
+  FlatOperation.witnessOperationsOnly ops
 
 private def prepareComponent (component : Component F) : PreparedComponent F :=
   let operations := component.rowOperations
@@ -215,20 +211,22 @@ private def prepareComponent (component : Component F) : PreparedComponent F :=
     interactions := operations.interactions
   }
 
-private def witgenStepWithData (data : ProverData F) (hint : ProverHint F)
-    (acc : Array F) : FlatOperation F → Array F
-  | .witness _ code =>
-      let environment : ProverEnvironment F := {
-        get index := acc[index]?.getD 0
-        data
-        hint
-      }
-      acc ++ (code.eval environment).toArray
-  | .assert _ | .lookup _ | .interact _ => acc
-
 private def witgenWithData (data : ProverData F) (hint : ProverHint F)
     (ops : List (FlatOperation F)) (input : Array F) : Array F :=
-  ops.foldl (witgenStepWithData data hint) input
+  FlatOperation.witgen hint ops input (data := data)
+
+/-- The scheduler's row evaluator delegates to the canonical data-aware interpreter. -/
+theorem rowEvaluator_eq (data : ProverData F) (hint : ProverHint F)
+    (ops : List (FlatOperation F)) (input : Array F) :
+    witgenWithData data hint ops input = FlatOperation.witgen hint ops input (data := data) := rfl
+
+/-- Dropping checks from the prepared witness program preserves generated cells only.
+The full circuit still owns the assertions, lookups, and channel interactions. -/
+theorem filteredRowEvaluator_eq (data : ProverData F) (hint : ProverHint F)
+    (ops : List (FlatOperation F)) (input : Array F) :
+    witgenWithData data hint (witnessOperationsOnly ops) input =
+      FlatOperation.witgen hint ops input (data := data) := by
+  exact FlatOperation.witgen_witnessOperationsOnly hint ops input
 
 /-- The runtime view of the same complete circuit inputs used by `deriveProverData`. -/
 private def generatedData :
