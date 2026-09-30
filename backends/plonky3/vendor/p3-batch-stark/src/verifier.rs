@@ -554,12 +554,23 @@ where
                         &challenges[start..start + challenges_per_lookup]
                     })
                 })
-            })
-            .ok_or_else(|| {
-                VerificationError::LookupError(LookupError::GlobalCumulativeMismatch(Some(
-                    public.name.clone(),
-                )))
-            })?;
+            });
+        let Some(challenge_pair) = challenge_pair else {
+            // A channel used only by the public verifier has no trace lookup challenges.
+            // All of its messages are public, so check exact balance per message instead.
+            // These occurrences have already been bound into the transcript above.
+            let balance: Val<SC> = public_lookups
+                .iter()
+                .filter(|other| other.name == public.name && other.values == public.values)
+                .map(|other| other.multiplicity)
+                .sum();
+            if balance != Val::<SC>::ZERO {
+                return Err(VerificationError::LookupError(
+                    LookupError::GlobalCumulativeMismatch(Some(public.name.clone())),
+                ));
+            }
+            continue;
+        };
         let alpha = challenge_pair[0];
         let beta = challenge_pair[1];
         let combined = public
