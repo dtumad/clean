@@ -26,6 +26,8 @@ jobs:
         # CleanTests shells out to snarkjs / wasm-validate; without them the
         # affected checks print SKIP instead of failing.
         run: lake build CleanTests
+      - name: Check additive verifier proofs
+        run: lake build --wfail --iofail ToClean ToCleanTest
 
   plonky3-backend:
     runs-on: ubuntu-latest
@@ -47,8 +49,12 @@ jobs:
             ~/.cargo/git
             backends/plonky3/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('backends/plonky3/Cargo.lock') }}
+      - name: Generate public-check regressions
+        run: |
+          lake build --wfail --iofail export_public_checks_rust
+          .lake/build/bin/export_public_checks_rust > .lake/build/public_checks.rs
+          .lake/build/bin/export_public_checks_rust fibonacci > .lake/build/checked_fibonacci.rs
       - name: Run plonky3 tests
         working-directory: backends/plonky3
         run: |
-          cargo test --release --test fibonacci_ensemble_tests -- --nocapture
-          cargo test --release --test femtocairo_flat_air_tests -- --nocapture
+          cargo test --locked --release -- --nocapture

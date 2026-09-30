@@ -47,6 +47,24 @@ cargo test --release --manifest-path backends/plonky3/Cargo.toml \
 The largest test generates, proves, and verifies a 4,096-step Fibonacci execution and reports
 witness generation, proving, verification, trace dimensions, and serialized proof size.
 
+The public-check regression uses the additive `ToClean.Circuit.VerifierAssertions` API: each zero
+assertion pulls its expression and pushes zero on a dedicated channel. Lean proves the raw ledger
+equivalence, including the occurrence bound. Rust tests preserve every occurrence, reject each
+bad cell and opposite/repeated bad values, and prove/verify the augmented Fibonacci inventory.
+They also construct invalid proofs without witness generation and require verification to reject
+them. The empty-inventory fixture exercises the scheduler and Lean statement only; the STARK
+backend requires physical components. These are exporter regressions, not an SP1 consumer port or
+a formal code-generation proof.
+
+Generate these disposable artifacts before running all backend tests (also done in CI):
+
+```bash
+lake build --wfail --iofail ToClean ToCleanTest export_public_checks_rust
+.lake/build/bin/export_public_checks_rust > .lake/build/public_checks.rs
+.lake/build/bin/export_public_checks_rust fibonacci > .lake/build/checked_fibonacci.rs
+cargo test --locked --release --manifest-path backends/plonky3/Cargo.toml
+```
+
 The generated ensemble path accepts a separately serialized runtime prover input for initializing
 private committed columns. Clean's semantic `ProverData` is not supplied by the caller: it is
 derived from the final component rows. Extracted witness programs may read stable cells of
