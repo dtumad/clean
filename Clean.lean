@@ -23,9 +23,6 @@ public import Clean.Examples.Add32Explicit
 public import Clean.Examples.ToJson
 public import Clean.Examples.HintExample
 public import Clean.Examples.FemtoCairo.FemtoCairo
-public import Clean.Examples.FemtoCairo.Plonky3Helpers
-public import Clean.Examples.FemtoCairo.Plonky3TestData
-public import Clean.Examples.FemtoCairo.Plonky3MemoryTestData
 public import Clean.Tables.Fibonacci8
 public import Clean.Tables.Fibonacci32
 public import Clean.Tables.Fibonacci32Inductive
@@ -43,8 +40,10 @@ public import Clean.Gadgets.BLAKE3.Permute
 public import Clean.Gadgets.BLAKE3.FinalStateUpdate
 public import Clean.Gadgets.BLAKE3.Round
 public import Clean.Gadgets.BLAKE3.FinalizeChunk
-public import Clean.Examples.FibonacciWithChannels
+public import Clean.Examples.FibonacciVm.Circuit
 public import Clean.Gadgets.SHA256.SHA256Compress
 public import Clean.Backends.Circom.Ast
 public import Clean.Backends.Circom.Compile
 public import Clean.Backends.Circom.R1CS
+public import Clean.Air.WitnessGeneration
+public import Clean.Air.Extraction.Rust

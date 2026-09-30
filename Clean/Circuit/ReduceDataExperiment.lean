@@ -1,4 +1,8 @@
-import Clean.Circuit
+module
+
+public import Clean.Circuit
+
+@[expose] public section
 
 namespace ReduceDataExperiment
 

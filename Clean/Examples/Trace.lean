@@ -1,7 +1,11 @@
-import Lean
-import Clean.Tables.Fibonacci8
-import Clean.Table.WitnessGeneration
-import Clean.Table.Json
+module
+
+public import Lean
+public import Clean.Tables.Fibonacci8
+public import Clean.Table.WitnessGeneration
+public import Clean.Table.Json
+
+@[expose] public section
 
 open Tables.Fibonacci8Table
 

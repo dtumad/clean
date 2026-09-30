@@ -1,4 +1,8 @@
-import Clean.Gadgets.ByteLookup
+module
+
+public import Clean.Gadgets.ByteLookup
+
+@[expose] public section
 
 namespace Gadgets
 inductive Byte (F : Type) where

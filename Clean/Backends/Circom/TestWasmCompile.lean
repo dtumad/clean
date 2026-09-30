@@ -133,6 +133,13 @@ def assertOps : List (Operation (F p1009)) :=
 
 /-! ## Unsupported constructs are rejected with errors -/
 
+#eval! for (label, expression) in ([
+    ("row indices", .index),
+    ("indexed lists", .listGetAtIndex [.const 0]),
+    ("prover inputs", .proverInputGet (.const 0))] : List (String × Witgen.FExpr (F p1009))) do
+  expectBinaryError s!"ensemble {label} rejected" "not yet supported"
+    (compileModule p1009 0 [] [] [.witness 1 (.ir [] (.lit #v[expression]))] 1)
+
 #eval! expectBinaryError "native witness rejected" "native" (compileModule p1009 0 [] [] ([.witness 1 (.native fun _ => #v[1])] : List (Operation (F p1009))) 1)
 
 #eval! expectBinaryOk "append compiles" "" (compileModule p1009 0 [] [] ([.witness 2 (.ir [] (.append (.lit #v[.const 0]) (.lit #v[.const 1])))] : List (Operation (F p1009))) 1)

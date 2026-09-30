@@ -17,3 +17,9 @@ lean_lib CleanTests where
 
 require "leanprover-community" / "mathlib" @ git "v4.33.1"
 require CompPoly from git "https://github.com/Verified-zkEVM/CompPoly.git"@"v4.33.1"
+
+lean_exe export_fibonacci_ensemble_rust where
+  root := `Clean.Examples.FibonacciVm.EnsembleRust
+
+lean_exe export_femtocairo_flat_air_rust where
+  root := `Clean.Examples.FemtoCairo.FlatAirRust

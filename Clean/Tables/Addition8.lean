@@ -1,7 +1,11 @@
-import Clean.Utils.Vector
-import Clean.Circuit.Basic
-import Clean.Table.Basic
-import Clean.Gadgets.Addition8.Addition8
+module
+
+public import Clean.Utils.Vector
+public import Clean.Circuit.Basic
+public import Clean.Table.Basic
+public import Clean.Gadgets.Addition8.Addition8
+
+@[expose] public section
 
 namespace Tables.Addition8
 open Gadgets

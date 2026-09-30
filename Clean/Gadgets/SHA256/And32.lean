@@ -1,4 +1,8 @@
-import Clean.Gadgets.SHA256.BitwiseOps
+module
+
+public import Clean.Gadgets.SHA256.BitwiseOps
+
+@[expose] public section
 
 namespace Gadgets.SHA256.And32
 variable {p : ℕ} [Fact p.Prime]

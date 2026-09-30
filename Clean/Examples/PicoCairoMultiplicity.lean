@@ -1,15 +1,19 @@
-import Clean.Examples.FemtoCairo.Types
-import Clean.Examples.FemtoCairo.Spec
-import Clean.Examples.FemtoCairo.FemtoCairo
-import Clean.Utils.SourceSinkPath
-import Clean.Examples.PicoCairoMultiplicity.Types
-import Clean.Examples.PicoCairoMultiplicity.Helpers
-import Clean.Examples.PicoCairoMultiplicity.AddInstruction
-import Clean.Examples.PicoCairoMultiplicity.MulInstruction
-import Clean.Examples.PicoCairoMultiplicity.LoadStateInstruction
-import Clean.Examples.PicoCairoMultiplicity.StoreStateInstruction
-import Clean.Examples.PicoCairoMultiplicity.ExecutionBundle
-import Clean.Examples.PicoCairoMultiplicity.TraceExecution
+module
+
+public import Clean.Examples.FemtoCairo.Types
+public import Clean.Examples.FemtoCairo.Spec
+public import Clean.Examples.FemtoCairo.FemtoCairo
+public import Clean.Utils.SourceSinkPath
+public import Clean.Examples.PicoCairoMultiplicity.Types
+public import Clean.Examples.PicoCairoMultiplicity.Helpers
+public import Clean.Examples.PicoCairoMultiplicity.AddInstruction
+public import Clean.Examples.PicoCairoMultiplicity.MulInstruction
+public import Clean.Examples.PicoCairoMultiplicity.LoadStateInstruction
+public import Clean.Examples.PicoCairoMultiplicity.StoreStateInstruction
+public import Clean.Examples.PicoCairoMultiplicity.ExecutionBundle
+public import Clean.Examples.PicoCairoMultiplicity.TraceExecution
+
+@[expose] public section
 
 /-!
 # PicoCairoMultiplicity

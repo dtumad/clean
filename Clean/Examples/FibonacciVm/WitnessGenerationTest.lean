@@ -1,0 +1,110 @@
+module
+
+public import Clean.Examples.FibonacciVm.Circuit
+public import Clean.Air.Extraction.Lower
+public import Clean.Utils.Primes
+
+-- Executable checks need these implementations in the metaprogram phase.
+public meta import Clean.Examples.FibonacciVm.Circuit
+public meta import Clean.Air.Extraction.Lower
+public meta import Clean.Utils.Primes
+
+@[expose] public section
+
+namespace Air.Flat.WitnessGenerationTest
+
+open Air.Flat.WitnessGeneration
+
+private def steps : ℕ := 32
+
+private def publicInput : fieldTriple (F pBabybear) :=
+  let state := fibonacci steps
+  (steps, state.1, state.2)
+
+private def result : Except String (List ℕ × ℕ × ℕ × Bool × Bool) :=
+  match FibonacciWitness.generate publicInput 1000 with
+  | .error error => .error error
+  | .ok witness =>
+      match witness.tables with
+      | _ :: _ :: bytes :: _ =>
+          let multiplicities := bytes.table.map fun row => row[1]?.getD 0
+          .ok (
+            witness.tables.map (·.length),
+            multiplicities.sum.val,
+            (multiplicities.map FiniteField.val).max?.getD 0,
+            constraintsHold witness,
+            channelsBalanced witness)
+      | _ => .error "ensemble has no byte table"
+
+/--
+The verifier seed automatically creates 32 Fibonacci rows; their pulls create 32
+distinct addition rows; byte range checks are accumulated in the 256 fixed byte rows.
+-/
+example : result = .ok ([32, 32, 256], 32, 2, true, true) := by native_decide
+
+private def derivedBytesData : Bool :=
+  match FibonacciWitness.generate publicInput 1000 with
+  | .error _ => false
+  | .ok witness =>
+      let rows := witness.data "bytes" 2
+      rows.size == 256 && match rows[42]? with
+        | some row => row[0] == (42 : F pBabybear)
+        | none => false
+
+/-- The byte component exports its complete `(value, multiplicity)` input rows. -/
+example : derivedBytesData = true := by native_decide
+
+private def dynamicComponentData : Bool :=
+  match FibonacciWitness.generate publicInput 1000 with
+  | .error _ => false
+  | .ok witness =>
+      let rows := witness.data "fibonacci" 4
+      rows.size == 32 && match rows[0]? with
+        | some row => row[0] == 1 && row[1] == 0 && row[2] == 0 && row[3] == 1
+        | none => false
+
+/-- Demand-generated components expose their complete inputs just like fixed components. -/
+example : dynamicComponentData = true := by native_decide
+
+private def repeatedSteps : ℕ := 400
+
+private def repeatedPublicInput : fieldTriple (F pBabybear) :=
+  let state := fibonacci repeatedSteps
+  (repeatedSteps, state.1, state.2)
+
+private def repeatedResult : Except String (List ℕ × Bool × Bool) :=
+  match FibonacciWitness.generate repeatedPublicInput 2000 with
+  | .error error => .error error
+  | .ok witness => .ok (
+      witness.tables.map (·.length),
+      constraintsHold witness,
+      channelsBalanced witness)
+
+/-- Repeated addition pulls coalesce after the period of Fibonacci modulo 256. -/
+example : repeatedResult = .ok ([512, 512, 256], true, true) := by native_decide
+
+private def invalidPublicInput : fieldTriple (F pBabybear) := (10, 42, 42)
+
+private def invalidRejected : Bool :=
+  match FibonacciWitness.generate invalidPublicInput 20 with
+  | .error _ => true
+  | .ok _ => false
+
+/-- A final state not reached within the configured fuel fails generation. -/
+example : invalidRejected = true := by native_decide
+
+private def noData : ProverData (F pBabybear) := fun _ _ => #[]
+
+private def extractedFirstRow : Except String (Array (F pBabybear)) := do
+  let program ← Air.Flat.Extraction.lower
+    (fibonacciEnsemble (p := pBabybear)).ensemble
+    (FibonacciWitness.config (p := pBabybear) 1000)
+    |>.mapError toString
+  let some component := program.components[0]?
+    | throw "extracted program has no Fibonacci component"
+  component.completeRow #[1, 0, 0, 1] noData
+
+/-- The typed extraction semantics execute the same row-local witness IR as the source circuit. -/
+example : extractedFirstRow = .ok #[1, 0, 0, 1, 1] := by native_decide
+
+end Air.Flat.WitnessGenerationTest

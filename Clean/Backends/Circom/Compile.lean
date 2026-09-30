@@ -605,12 +605,13 @@ def compileExpr (vm : VarMap) : Expression F → CodeBuilder → Except String C
 mutual
   def containsListGet (e : FExpr F) : Bool :=
     match e with
-    | .expr _ | .const _ | .localVar _ => false
+    | .expr _ | .const _ | .localVar _ | .index => false
     | .add x y | .mul x y => containsListGet x || containsListGet y
     | .inv x => containsListGet x
     | .ofU64 n => containsListGetU n
     | .ite c t e' => containsListGetB c || containsListGet t || containsListGet e'
-    | .listGet _ _ => true
+    | .listGet _ _ | .listGetAtIndex _ => true
+    | .proverInputGet i => containsListGetU i
     | .dataGet _ _ _ _ | .hintGet _ _ _ _ => false
 
   def containsListGetU (e : U64Expr F) : Bool :=
@@ -715,6 +716,9 @@ def compileFExpr (vm : VarMap) : FExpr F → CodeBuilder → Except String CodeB
       let selInstrs ← if xs.isEmpty then pure (List.replicate nw (i64.const 0))
         else compileFExprList vm idxLocal nw 0 xs
       pure (idxCB.pushList captureIdx |>.pushList selInstrs)
+  | .index, _ => .error "compileFExpr: ensemble row indices are not yet supported"
+  | .listGetAtIndex _, _ => .error "compileFExpr: ensemble indexed lists are not yet supported"
+  | .proverInputGet _, _ => .error "compileFExpr: ensemble prover inputs are not yet supported"
   | .dataGet _ _ _ _, _ => .error "compileFExpr: dataGet is not yet supported"
   | .hintGet _ _ _ _, _ => .error "compileFExpr: hintGet is not yet supported"
 
