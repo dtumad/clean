@@ -395,7 +395,13 @@ impl<F: WitnessField> Program<F> for FibonacciEnsembleProgram {
                     interaction: 0,
                     column: 1,
                     predicate: |_prover_input: &[F]| true,
-                    row_index: None,
+                    row_index: Some(|_prover_input: &[F]| {
+                        (_prover_input
+                            .get((0u64) as usize)
+                            .copied()
+                            .unwrap_or(F::ZERO))
+                        .canonical_u64()
+                    }),
                 }],
             },
         ]

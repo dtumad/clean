@@ -355,7 +355,8 @@ private def preallocatedHandlerToRust (component : ComponentProgram F)
   let predicate ← bexprToRust #[] "&[]" "0u64" handler.predicate
   let rowIndex ← match handler.rowIndex with
     | none => pure "None"
-    | some index => return s!"Some(|_prover_input: &[F]| {← u64exprToRust #[] "&[]" "0u64" index})"
+    | some index => (u64exprToRust #[] "&[]" "0u64" index).map fun expression =>
+        s!"Some(|_prover_input: &[F]| {expression})"
   return s!"PreallocatedHandler \{ channel: {quoted interaction.channel.name}, direction: \
     {directionToRust direction}, interaction: {handler.interaction}, column: {handler.column}, predicate: |_prover_input: &[F]| {predicate}, row_index: {rowIndex} }"
 
