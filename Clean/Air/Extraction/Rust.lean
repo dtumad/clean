@@ -348,17 +348,22 @@ private def rowToRust (row : Array F) : String :=
   s!"vec![{commaSep (row.toList.map field)}]"
 
 private def preallocatedHandlerToRust (component : ComponentProgram F)
-    (handler : PreallocatedHandler) : Except String String := do
+    (handler : PreallocatedHandler F) : Except String String := do
   let some interaction := component.interactions[handler.interaction]?
     | throw s!"preallocated handler interaction {handler.interaction} is out of bounds"
   let direction := if interaction.assumeGuarantees then Direction.push else Direction.pull
+  let predicate ← bexprToRust #[] "&[]" "0u64" handler.predicate
+  let rowIndex ← match handler.rowIndex with
+    | none => pure "None"
+    | some index => return s!"Some(|_prover_input: &[F]| {← u64exprToRust #[] "&[]" "0u64" index})"
   return s!"PreallocatedHandler \{ channel: {quoted interaction.channel.name}, direction: \
-    {directionToRust direction}, interaction: {handler.interaction}, column: {handler.column} }"
+    {directionToRust direction}, interaction: {handler.interaction}, column: {handler.column}, predicate: |_prover_input: &[F]| {predicate}, row_index: {rowIndex} }"
 
 private def modeToRust (component : ComponentProgram F) : Mode F → Except String String
-  | .demand mode =>
+  | .demand mode => do
       let input := commaSep (mode.input.cells.map inputCellToRust)
-      pure s!"Mode::Demand(DemandMode \{ channel: {quoted mode.channel}, direction: {directionToRust mode.direction}, aggregation: {aggregationToRust mode.aggregation}, input: vec![{input}] })"
+      let predicate ← bexprToRust #[] "&[]" "0u64" mode.predicate
+      pure s!"Mode::Demand(DemandMode \{ channel: {quoted mode.channel}, direction: {directionToRust mode.direction}, aggregation: {aggregationToRust mode.aggregation}, input: vec![{input}], predicate: |_prover_input: &[F]| {predicate} })"
   | .preallocated mode => do
       let handlers ← mode.handlers.mapM (preallocatedHandlerToRust component)
       return s!"Mode::Preallocated \{ handlers: vec![{commaSep handlers}] }"

@@ -1345,6 +1345,7 @@ impl<F: WitnessField> Program<F> for FemtoCairoFlatAirProgram {
                     InputCell::Message(1),
                     InputCell::Message(2),
                 ],
+                predicate: |_prover_input: &[F]| true,
             }),
             Mode::Preallocated {
                 handlers: vec![PreallocatedHandler {
@@ -1352,6 +1353,8 @@ impl<F: WitnessField> Program<F> for FemtoCairoFlatAirProgram {
                     direction: Direction::Pull,
                     interaction: 0,
                     column: 2,
+                    predicate: |_prover_input: &[F]| true,
+                    row_index: None,
                 }],
             },
             Mode::Preallocated {
@@ -1360,6 +1363,8 @@ impl<F: WitnessField> Program<F> for FemtoCairoFlatAirProgram {
                     direction: Direction::Pull,
                     interaction: 0,
                     column: 2,
+                    predicate: |_prover_input: &[F]| true,
+                    row_index: None,
                 }],
             },
         ]

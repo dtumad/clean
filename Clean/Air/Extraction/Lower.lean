@@ -21,6 +21,7 @@ inductive LoweringError where
   | malformedWitnessLocals (component operation : ℕ)
   | malformedFixedProgram (component : ℕ)
   | malformedInitializer (component : ℕ)
+  | malformedRouting (component : ℕ)
   | legacyLookup (component : ℕ)
   | fixedDemandMode (component : ℕ)
   | preallocatedWidth (component expected actual : ℕ)
@@ -49,6 +50,8 @@ instance : ToString LoweringError where
         s!"component {component} fixed-column program has an invalid local reference"
     | .malformedInitializer component =>
         s!"component {component} row initializer has an invalid local reference"
+    | .malformedRouting component =>
+        s!"component {component} routing expression has an invalid local reference"
     | .legacyLookup component =>
         s!"component {component} contains a legacy lookup; extraction supports channels only"
     | .fixedDemandMode component =>
@@ -152,13 +155,17 @@ private def validateMode (index : ℕ) (component : Component F)
       unless paddedHeight = fixed.height do
         throw (.fixedPadding index fixed.height paddedHeight)
   match mode with
-  | .demand _ => pure ()
+  | .demand mode =>
+      unless bexprWellFormed [] mode.predicate do throw (.malformedRouting index)
   | .preallocated preallocated =>
       let expectedWidth := component.rowOffset - fixedWidth
       unless preallocated.input.width = expectedWidth do
         throw (.preallocatedWidth index expectedWidth preallocated.input.width)
       let _ ← lowerRowProgram (.malformedInitializer index) preallocated.input
       for handler in preallocated.handlers do
+        unless bexprWellFormed [] handler.predicate &&
+            handler.rowIndex.all (u64exprWellFormed []) do
+          throw (.malformedRouting index)
         unless handler.interaction < component.rowOperations.interactions.length do
           throw (.preallocatedInteraction index handler.interaction)
         unless fixedWidth ≤ handler.column && handler.column < component.rowOffset do

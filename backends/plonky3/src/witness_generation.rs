@@ -95,20 +95,25 @@ pub struct DemandMode<F> {
     pub direction: Direction,
     pub aggregation: Aggregation,
     pub input: Vec<InputCell<F>>,
+    pub predicate: fn(&[F]) -> bool,
 }
 
 #[derive(Clone, Debug)]
-pub struct PreallocatedHandler {
+pub struct PreallocatedHandler<F> {
     pub channel: &'static str,
     pub direction: Direction,
     pub interaction: usize,
     pub column: usize,
+    pub predicate: fn(&[F]) -> bool,
+    pub row_index: Option<fn(&[F]) -> u64>,
 }
 
 #[derive(Clone, Debug)]
 pub enum Mode<F> {
     Demand(DemandMode<F>),
-    Preallocated { handlers: Vec<PreallocatedHandler> },
+    Preallocated {
+        handlers: Vec<PreallocatedHandler<F>>,
+    },
 }
 
 /// Component-input rows available to extracted witness programs.
@@ -311,9 +316,15 @@ fn remove_interactions<F: WitnessField>(
 
 fn mode_handles<F: WitnessField>(mode: &Mode<F>, demand: &Demand<F>) -> bool {
     match mode {
-        Mode::Demand(mode) => mode.channel == demand.channel && mode.direction == demand.direction,
+        Mode::Demand(mode) => {
+            mode.channel == demand.channel
+                && mode.direction == demand.direction
+                && (mode.predicate)(&demand.message)
+        }
         Mode::Preallocated { handlers } => handlers.iter().any(|handler| {
-            handler.channel == demand.channel && handler.direction == demand.direction
+            handler.channel == demand.channel
+                && handler.direction == demand.direction
+                && (handler.predicate)(&demand.message)
         }),
     }
 }
@@ -410,33 +421,42 @@ fn handle_demand<F: WitnessField, P: Program<F>>(
 
 fn handle_preallocated<F: WitnessField, P: Program<F>>(
     component: usize,
-    handlers: &[PreallocatedHandler],
+    handlers: &[PreallocatedHandler<F>],
     demand: &Demand<F>,
     table: &mut [Row<F>],
     demands: &mut Vec<Demand<F>>,
     data: &WitnessData<F>,
 ) -> Result<(), String> {
+    let rows: &[Row<F>] = table;
     let mut matches = handlers.iter().flat_map(|handler| {
-        table
-            .iter()
-            .enumerate()
-            .filter_map(move |(row_index, row)| {
-                if handler.channel != demand.channel || handler.direction != demand.direction {
-                    return None;
-                }
-                let interaction = P::interactions(component, &row.values)
-                    .into_iter()
-                    .nth(handler.interaction)?;
-                let direction = if interaction.assume_guarantees {
-                    Direction::Push
-                } else {
-                    Direction::Pull
-                };
-                (interaction.channel == handler.channel
-                    && direction == handler.direction
-                    && interaction.message == demand.message)
-                    .then_some((handler, row_index))
-            })
+        let eligible = handler.channel == demand.channel
+            && handler.direction == demand.direction
+            && (handler.predicate)(&demand.message);
+        let (start, end) = if !eligible {
+            (0, 0)
+        } else if let Some(index) = handler.row_index {
+            match usize::try_from(index(&demand.message)) {
+                Ok(index) if index < rows.len() => (index, index + 1),
+                _ => (0, 0),
+            }
+        } else {
+            (0, rows.len())
+        };
+        (start..end).filter_map(move |row_index| {
+            let row = &rows[row_index];
+            let interaction = P::interactions(component, &row.values)
+                .into_iter()
+                .nth(handler.interaction)?;
+            let direction = if interaction.assume_guarantees {
+                Direction::Push
+            } else {
+                Direction::Pull
+            };
+            (interaction.channel == handler.channel
+                && direction == handler.direction
+                && interaction.message == demand.message)
+                .then_some((handler, row_index))
+        })
     });
     let (handler, row_index) = matches.next().ok_or_else(|| {
         format!(
@@ -700,4 +720,128 @@ pub fn generate<F: WitnessField, P: Program<F>>(
             .map(|table| table.into_iter().map(|row| row.values).collect())
             .collect(),
     })
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+    use alloc::{vec, vec::Vec};
+    use p3_baby_bear::BabyBear as F;
+    use p3_field::PrimeCharacteristicRing;
+
+    struct Indexed<const CASE: u8>;
+    impl<const CASE: u8> Program<F> for Indexed<CASE> {
+        const FUEL: usize = 8;
+        const COMPONENTS: usize = 1;
+        const PUBLIC_INPUTS: usize = 1;
+        const PROVER_INPUTS: usize = 0;
+        const FIXED_WIDTHS: &'static [usize] = &[1];
+        const COMPONENT_NAMES: &'static [&'static str] = &["duplicates"];
+        fn modes() -> Vec<Mode<F>> {
+            vec![Mode::Preallocated {
+                handlers: vec![PreallocatedHandler {
+                    channel: "key",
+                    direction: Direction::Pull,
+                    interaction: 0,
+                    column: 1,
+                    predicate: |message| CASE != 4 && message[0].canonical_u64() < 2,
+                    row_index: if CASE == 1 {
+                        None
+                    } else {
+                        Some(|message: &[F]| match CASE {
+                            2 => 4,
+                            3 => 0,
+                            _ => message[0].canonical_u64() + 1,
+                        })
+                    },
+                }],
+            }]
+        }
+        fn padding() -> Vec<Padding<F>> {
+            vec![Padding {
+                input: vec![F::ZERO, F::ZERO],
+                minimum_rows: 4,
+            }]
+        }
+        fn initial_rows(_: usize, _: &[F]) -> Result<Vec<Vec<F>>, String> {
+            Ok(vec![
+                vec![F::ZERO, F::ZERO],
+                vec![F::ZERO, F::ZERO],
+                vec![F::ONE, F::ZERO],
+                vec![F::ZERO, F::ZERO],
+            ])
+        }
+        fn complete_row(_: usize, input: &[F], _: &WitnessData<F>) -> Result<Vec<F>, String> {
+            Ok(input.to_vec())
+        }
+        fn interactions(_: usize, row: &[F]) -> Vec<Interaction<F>> {
+            vec![Interaction {
+                channel: "key",
+                message: vec![row[0]],
+                multiplicity: row[1],
+                assume_guarantees: false,
+            }]
+        }
+        fn verifier_interactions(public: &[F]) -> Vec<Interaction<F>> {
+            vec![Interaction {
+                channel: "key",
+                message: public.to_vec(),
+                multiplicity: -F::from_u64(2),
+                assume_guarantees: true,
+            }]
+        }
+    }
+
+    #[test]
+    fn indexed_duplicate_selection_keeps_inactive_rows() {
+        let witness = generate::<F, Indexed<0>>(&[F::ZERO], &[]).unwrap();
+        assert_eq!(witness.tables[0].len(), 4);
+        assert_eq!(witness.tables[0][1], [F::ZERO, F::from_u64(2)]);
+        assert_eq!(witness.tables[0][0], [F::ZERO, F::ZERO]);
+        assert_eq!(witness.tables[0][3], [F::ZERO, F::ZERO]);
+        let witness = generate::<F, Indexed<0>>(&[F::ONE], &[]).unwrap();
+        assert_eq!(witness.tables[0][2], [F::ONE, F::from_u64(2)]);
+    }
+
+    #[test]
+    fn scan_still_rejects_ambiguous_duplicates() {
+        assert!(generate::<F, Indexed<1>>(&[F::ZERO], &[])
+            .unwrap_err()
+            .to_string()
+            .contains("multiple rows"));
+    }
+
+    #[test]
+    fn index_does_not_bypass_bounds_or_full_message_check() {
+        for error in [
+            generate::<F, Indexed<2>>(&[F::ZERO], &[]).unwrap_err(),
+            generate::<F, Indexed<3>>(&[F::ONE], &[]).unwrap_err(),
+        ] {
+            assert!(error.to_string().contains("no row"));
+        }
+    }
+
+    #[test]
+    fn predicates_filter_preallocated_and_demand_handlers() {
+        assert!(generate::<F, Indexed<4>>(&[F::ZERO], &[])
+            .unwrap_err()
+            .to_string()
+            .contains("unhandled channel"));
+        let mode = Mode::Demand(DemandMode {
+            channel: "key",
+            direction: Direction::Pull,
+            aggregation: Aggregation::ByMessage,
+            input: vec![InputCell::Message(0), InputCell::Multiplicity],
+            predicate: |message: &[F]| message[0] == F::ONE,
+        });
+        let mut demand = Demand {
+            channel: "key",
+            direction: Direction::Pull,
+            message: vec![F::ONE],
+            count: 1,
+        };
+        assert!(mode_handles(&mode, &demand));
+        demand.message[0] = F::ZERO;
+        assert!(!mode_handles(&mode, &demand));
+    }
 }

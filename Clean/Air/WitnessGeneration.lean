@@ -73,13 +73,22 @@ structure DemandMode (F : Type) where
   direction : Direction
   aggregation : Aggregation
   input : InputTemplate F
+  /-- Message-only filter. The serialized message is the IR's prover input; row index is zero. -/
+  predicate : Witgen.BExpr F := .true
+  predicate_valid : predicate.validForRow .proverInput = true := by rfl
 
 /-- A channel handler for preallocated rows. The interaction is the component
 interaction whose message selects a row; `column` is the generated multiplicity
 input updated when the opposite demand arrives. -/
-structure PreallocatedHandler where
+structure PreallocatedHandler (F : Type) where
   interaction : ℕ
   column : ℕ
+  /-- Select a disjoint part of the channel's demand without changing its message. -/
+  predicate : Witgen.BExpr F := .true
+  predicate_valid : predicate.validForRow .proverInput = true := by rfl
+  /-- Optional direct row address. Its actual interaction is still checked against the full key. -/
+  rowIndex : Option (Witgen.U64Expr F) := none
+  rowIndex_valid : rowIndex.all (·.validForRow .proverInput) = true := by rfl
 
 /-- Rows allocated before channel balancing. Fixed columns, when present, are
 prepended by the generic builder; `input` is an index-aware Witness IR program for
@@ -88,7 +97,7 @@ structure PreallocatedMode (F : Type) where
   rows : ℕ
   input : Witgen.RowProgram F
   input_valid : input.Valid .proverInput
-  handlers : List PreallocatedHandler
+  handlers : List (PreallocatedHandler F)
 
 /-- The row-allocation modes needed by flat AIR ensembles. Fixed columns are an
 orthogonal component property and are not themselves a generation mode. -/
@@ -320,18 +329,25 @@ private def allInteractions (ensemble : Ensemble F PublicIO) (publicInput : Publ
 private def handlerDirection (interaction : AbstractInteraction F) : Direction :=
   if interaction.assumeGuarantees then .push else .pull
 
+/-- A routing program sees only the triggering message, never committed data or mutable rows. -/
+def messageContext (message : Array F) : Witgen.Ctx F where
+  env := { get := fun _ => 0, data := fun _ _ => #[], hint := .empty F }
+  proverInput := message
+
 private def PreallocatedHandler.handles (prepared : PreparedComponent F)
-    (handler : PreallocatedHandler) (demand : Demand F) : Bool :=
+    (handler : PreallocatedHandler F) (demand : Demand F) : Bool :=
   match prepared.interactions[handler.interaction]? with
   | none => false
   | some interaction =>
       interaction.channel.name == demand.channel &&
-        handlerDirection interaction == demand.direction
+        handlerDirection interaction == demand.direction &&
+        handler.predicate.eval (messageContext demand.message)
 
 private def Mode.handles (prepared : PreparedComponent F) (mode : Mode F)
     (demand : Demand F) : Bool :=
   match mode with
-  | .demand mode => mode.channel == demand.channel && mode.direction == demand.direction
+  | .demand mode => mode.channel == demand.channel && mode.direction == demand.direction &&
+      mode.predicate.eval (messageContext demand.message)
   | .preallocated mode => mode.handlers.any fun handler => handler.handles prepared demand
 
 private def handlerIndices (prepared : List (PreparedComponent F)) (modes : List (Mode F))
@@ -401,16 +417,23 @@ private def handleDemand (prepared : PreparedComponent F) (mode : DemandMode F)
           }
 
 private structure PreallocatedMatch (F : Type) where
-  handler : PreallocatedHandler
+  handler : PreallocatedHandler F
   rowIndex : ℕ
   row : GeneratedRow F
 
 private def findPreallocatedMatch (prepared : PreparedComponent F)
-    (handlers : List PreallocatedHandler) (demand : Demand F) (table : GeneratedTable F)
+    (handlers : List (PreallocatedHandler F)) (demand : Demand F) (table : GeneratedTable F)
     (data : ProverData F) : Except String (PreallocatedMatch F) :=
   let candidates := handlers.flatMap fun handler =>
     if handler.handles prepared demand then
-      table.rows.zipIdx.filterMap fun (row, rowIndex) =>
+      let rows := match handler.rowIndex with
+        | none => table.rows.zipIdx
+        | some index =>
+            let rowIndex := (index.eval (messageContext demand.message)).toNat
+            match table.rows[rowIndex]? with
+            | none => []
+            | some row => [(row, rowIndex)]
+      rows.filterMap fun (row, rowIndex) =>
         match prepared.interactions[handler.interaction]? with
         | none => none
         | some abstract =>
@@ -423,7 +446,7 @@ private def findPreallocatedMatch (prepared : PreparedComponent F)
   | _ => .error s!"preallocated handler has multiple rows for channel '{demand.channel}' message"
 
 private def handlePreallocated (prepared : PreparedComponent F)
-    (handlers : List PreallocatedHandler) (demand : Demand F) (table : GeneratedTable F)
+    (handlers : List (PreallocatedHandler F)) (demand : Demand F) (table : GeneratedTable F)
     (data : ProverData F) : Except String (TableMutation F) := do
   let found ← findPreallocatedMatch prepared handlers demand table data
   let some current := found.row.input[found.handler.column]?

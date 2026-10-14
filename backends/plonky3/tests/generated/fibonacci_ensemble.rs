@@ -374,6 +374,7 @@ impl<F: WitnessField> Program<F> for FibonacciEnsembleProgram {
                     InputCell::Message(1),
                     InputCell::Message(2),
                 ],
+                predicate: |_prover_input: &[F]| true,
             }),
             Mode::Demand(DemandMode {
                 channel: "add8",
@@ -385,6 +386,7 @@ impl<F: WitnessField> Program<F> for FibonacciEnsembleProgram {
                     InputCell::Message(2),
                     InputCell::Multiplicity,
                 ],
+                predicate: |_prover_input: &[F]| true,
             }),
             Mode::Preallocated {
                 handlers: vec![PreallocatedHandler {
@@ -392,6 +394,8 @@ impl<F: WitnessField> Program<F> for FibonacciEnsembleProgram {
                     direction: Direction::Pull,
                     interaction: 0,
                     column: 1,
+                    predicate: |_prover_input: &[F]| true,
+                    row_index: None,
                 }],
             },
         ]
