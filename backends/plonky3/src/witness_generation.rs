@@ -366,6 +366,11 @@ fn add_multiplicity<F: WitnessField>(
     message: Vec<F>,
     multiplicity: F,
 ) {
+    // Pending demands are always nonzero. A zero occurrence changes no demand, but
+    // remains in the physical row's interactions and in the exported ledger.
+    if multiplicity == F::ZERO {
+        return;
+    }
     if let Some(index) = demands
         .iter()
         .position(|current| current.channel == channel && current.message == message)
@@ -376,7 +381,7 @@ fn add_multiplicity<F: WitnessField>(
         } else {
             demands[index].multiplicity = total;
         }
-    } else if multiplicity != F::ZERO {
+    } else {
         demands.push(Demand {
             channel,
             message,
@@ -841,6 +846,26 @@ mod routing_tests {
     use alloc::{vec, vec::Vec};
     use p3_baby_bear::BabyBear as F;
     use p3_field::PrimeCharacteristicRing;
+
+    #[test]
+    fn zero_occurrences_preserve_pending_multiplicities() {
+        let mut demands = Vec::new();
+        add_multiplicity(&mut demands, "key", vec![F::ONE], F::from_u64(3));
+        add_multiplicity(&mut demands, "key", vec![F::ZERO], -F::ONE);
+        // Fixed rows include both matching and unused zero-count occurrences.
+        for key in [F::ZERO, F::ONE, F::from_u64(2)] {
+            add_multiplicity(&mut demands, "key", vec![key], F::ZERO);
+        }
+        add_multiplicity(&mut demands, "unused", vec![F::ONE], F::ZERO);
+        assert_eq!(demands.len(), 2);
+        assert_eq!(demands[0].message, vec![F::ONE]);
+        assert_eq!(demands[0].multiplicity, F::from_u64(3));
+        assert_eq!(demands[1].message, vec![F::ZERO]);
+        assert_eq!(demands[1].multiplicity, -F::ONE);
+        add_multiplicity(&mut demands, "key", vec![F::ONE], -F::from_u64(3));
+        add_multiplicity(&mut demands, "key", vec![F::ZERO], F::ONE);
+        assert!(demands.is_empty());
+    }
 
     struct Indexed<const CASE: u8>;
     impl<const CASE: u8> Program<F> for Indexed<CASE> {
