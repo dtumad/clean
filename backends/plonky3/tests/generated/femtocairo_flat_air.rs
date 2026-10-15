@@ -739,6 +739,10 @@ pub mod component_0 {
                 InputCell::Message(1),
                 InputCell::Message(2),
             ],
+            predicate: |row: &[F]| {
+                let row_index = 0u64;
+                true
+            },
         })
     }
 
@@ -808,6 +812,11 @@ pub mod component_1 {
                 direction: Direction::Pull,
                 interaction: 0,
                 column: 2,
+                predicate: |row: &[F]| {
+                    let row_index = 0u64;
+                    true
+                },
+                row_index: None,
             }],
         }
     }
@@ -918,6 +927,11 @@ pub mod component_2 {
                 direction: Direction::Pull,
                 interaction: 0,
                 column: 2,
+                predicate: |row: &[F]| {
+                    let row_index = 0u64;
+                    true
+                },
+                row_index: None,
             }],
         }
     }

@@ -55,17 +55,20 @@ end RowProgram
 inductive RowProgram.Source where
   | fixed
   | prover
+  /-- Routing reads a channel message through the ordinary variable environment. -/
+  | message
 deriving DecidableEq
 
 def RowProgram.Source.allowsHints : RowProgram.Source → Bool
   | .fixed => false
   | .prover => true
+  | .message => false
 
 mutual
 
 /-- Whether an expression is valid in a row program. These programs have no circuit-row or semantic-data environment. Prover row programs additionally read hints; fixed programs do not. -/
 def FExpr.validForRow (source : RowProgram.Source) : FExpr F → Bool
-  | .expr _ => false
+  | .expr _ => decide (source = .message)
   | .const _ | .localVar _ => true
   | .add left right | .mul left right =>
       left.validForRow source && right.validForRow source

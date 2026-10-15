@@ -173,16 +173,18 @@ def interactionValues (component : ComponentProgram F) (row : Array F)
 end ComponentProgram
 
 /-- A preallocated handler, with the channel and direction of the component interaction it serves. -/
-structure HandlerProgram where
+structure HandlerProgram (F : Type) where
   channel : String
   direction : Direction
   interaction : ℕ
   column : ℕ
+  predicate : Witgen.BExpr F
+  rowIndex : Option (Witgen.U64Expr F)
 
 /-- How the rows of one component are generated, with the row program of preallocated rows validated. -/
 inductive ModeProgram (F : Type) [FiniteField F] where
   | demand (mode : DemandMode F)
-  | preallocated (rows : UInt64) (input : WitnessBlock F) (handlers : List HandlerProgram)
+  | preallocated (rows : UInt64) (input : WitnessBlock F) (handlers : List (HandlerProgram F))
 
 /-- Complete typed artifact consumed by source-code backends. -/
 structure Program (F : Type) [FiniteField F] where
@@ -203,6 +205,7 @@ inductive LoweringError where
   | malformedWitnessLocals (component operation : ℕ)
   | malformedFixedProgram (component : ℕ)
   | malformedInitializer (component : ℕ)
+  | malformedRouting (component : ℕ)
   | handlerInteraction (component interaction : ℕ)
   | legacyLookup (component : ℕ)
   | componentVariable (component index width : ℕ)
@@ -220,6 +223,8 @@ instance : ToString LoweringError where
         s!"component {component} fixed-column program has an invalid local reference"
     | .malformedInitializer component =>
         s!"component {component} row initializer has an invalid local reference"
+    | .malformedRouting component =>
+        s!"component {component} routing expression has an invalid local reference"
     | .handlerInteraction component interaction =>
         s!"component {component} preallocated handler refers to missing interaction {interaction}"
     | .legacyLookup component =>
@@ -294,8 +299,10 @@ def lowerComponent (index : ℕ) (component : Component F) :
     interactions
   }
 
-def lowerHandler (index : ℕ) (component : ComponentProgram F) (handler : PreallocatedHandler) :
-    Except LoweringError HandlerProgram := do
+def lowerHandler (index : ℕ) (component : ComponentProgram F) (handler : PreallocatedHandler F) :
+    Except LoweringError (HandlerProgram F) := do
+  unless bexprWellFormed [] handler.predicate && handler.rowIndex.all (u64exprWellFormed []) do
+    throw (.malformedRouting index)
   let some interaction := component.interactions[handler.interaction]?
     | throw (.handlerInteraction index handler.interaction)
   return {
@@ -303,10 +310,14 @@ def lowerHandler (index : ℕ) (component : ComponentProgram F) (handler : Preal
     direction := if interaction.assumeGuarantees then .push else .pull
     interaction := handler.interaction
     column := handler.column
+    predicate := handler.predicate
+    rowIndex := handler.rowIndex
   }
 
 def lowerMode (index : ℕ) (component : ComponentProgram F) : Mode F → Except LoweringError (ModeProgram F)
-  | .demand mode => pure (.demand mode)
+  | .demand mode => do
+      unless bexprWellFormed [] mode.predicate do throw (.malformedRouting index)
+      return .demand mode
   | .preallocated mode => do
       let input ← lowerRowProgram (.malformedInitializer index) mode.input
       let handlers ← mode.handlers.mapM (lowerHandler index component)

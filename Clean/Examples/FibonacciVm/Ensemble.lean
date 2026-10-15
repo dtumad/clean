@@ -306,7 +306,12 @@ def bytesMode : Mode (F p) := .preallocated {
   rows := (bytesFixedColumns (p := p)).height
   input := .ofFExprs #v[.const 0]
   input_valid := by rfl
-  handlers := [{ interaction := 0, column := 1 }]
+  handlers := [{
+    interaction := 0
+    column := 1
+    rowIndex := some (.val (.expr (.var ⟨0⟩)))
+    rowIndex_valid := by rfl
+  }]
 }
 
 /-- Channel-driven witness-generation metadata for each component of the ensemble. -/

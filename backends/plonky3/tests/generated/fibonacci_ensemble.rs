@@ -79,6 +79,10 @@ pub mod component_0 {
                 InputCell::Message(1),
                 InputCell::Message(2),
             ],
+            predicate: |row: &[F]| {
+                let row_index = 0u64;
+                true
+            },
         })
     }
 
@@ -169,6 +173,10 @@ pub mod component_1 {
                 InputCell::Message(2),
                 InputCell::Multiplicity,
             ],
+            predicate: |row: &[F]| {
+                let row_index = 0u64;
+                true
+            },
         })
     }
 
@@ -238,6 +246,14 @@ pub mod component_2 {
                 direction: Direction::Pull,
                 interaction: 0,
                 column: 1,
+                predicate: |row: &[F]| {
+                    let row_index = 0u64;
+                    true
+                },
+                row_index: Some(|row: &[F]| {
+                    let row_index = 0u64;
+                    (row.get(0).copied().unwrap_or(F::ZERO)).canonical_u64()
+                }),
             }],
         }
     }

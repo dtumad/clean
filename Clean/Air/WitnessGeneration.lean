@@ -10,7 +10,7 @@ public import Clean.Circuit.WitnessGeneration
 
 This file contains the executable reference builder for flat AIR ensemble witnesses. Soundness does not depend on this builder; generated rows still have to satisfy the component constraints and the global channel-balance relation.
 
-`Config.validate` checks generation metadata against an ensemble once. A `ValidConfig` carries that check, and generation from it cannot hit structural errors. Its remaining failures are semantic: channel imbalance that no component handles, a message no preallocated row matches, and running out of fuel.
+`Config.validate` checks generation metadata against an ensemble once. A `ValidConfig` carries that check, and generation from it cannot hit structural errors. Its remaining failures are semantic: channel imbalance that no component handles, overlapping message routes, a message with no unique preallocated row, and running out of fuel.
 
 The builder maintains the channel imbalance incrementally, as the net field multiplicity of each channel message, the quantity channel balance is about. New rows add their interactions; updated rows first remove their previous contribution and then add their new one.
 -/
@@ -64,18 +64,26 @@ structure DemandMode (F : Type) where
   direction : Direction
   aggregation : Aggregation
   input : InputTemplate F
+  /-- Variables address the triggering message, not a circuit row. -/
+  predicate : Witgen.BExpr F := .true
+  predicate_valid : predicate.validForRow .message = true := by rfl
 
 /-- A channel handler for preallocated rows. The interaction is the component interaction whose message selects a row; `column` is the generated multiplicity input updated when the opposite demand arrives. -/
-structure PreallocatedHandler where
+structure PreallocatedHandler (F : Type) where
   interaction : ℕ
   column : ℕ
+  predicate : Witgen.BExpr F := .true
+  predicate_valid : predicate.validForRow .message = true := by rfl
+  /-- Optional direct address, checked against the complete interaction message. -/
+  rowIndex : Option (Witgen.U64Expr F) := none
+  rowIndex_valid : rowIndex.all (·.validForRow .message) = true := by rfl
 
 /-- Rows allocated before channel balancing. Fixed columns, when present, are prepended by the generic builder; `input` is an index-aware Witness IR program for the prover-owned suffix. -/
 structure PreallocatedMode (F : Type) where
   rows : UInt64
   input : Witgen.RowProgram F
   input_valid : input.Valid .prover
-  handlers : List PreallocatedHandler
+  handlers : List (PreallocatedHandler F)
 
 /-- The row-allocation modes needed by flat AIR ensembles. Fixed columns are an orthogonal component property and are not themselves a generation mode. -/
 inductive Mode (F : Type) where
@@ -165,12 +173,17 @@ instance : ToString ConfigError where
 def handlerDirection (interaction : AbstractInteraction F) : Direction :=
   if interaction.assumeGuarantees then .push else .pull
 
-/-- The channels and directions of demand a component's generation mode handles. -/
+/-- Unconditional handlers are checked statically. Conditional handlers must match uniquely
+on each actual message during generation. -/
 def Mode.handled (component : Component F) : Mode F → List (String × Direction)
-  | .demand mode => [(mode.channel.name, mode.direction)]
+  | .demand mode => match mode.predicate with
+    | .true => [(mode.channel.name, mode.direction)]
+    | _ => []
   | .preallocated mode => mode.handlers.filterMap fun handler =>
-      component.rowOperations.interactions[handler.interaction]?.map fun interaction =>
-        (interaction.channel.name, handlerDirection interaction)
+      match handler.predicate with
+      | .true => component.rowOperations.interactions[handler.interaction]?.map fun interaction =>
+          (interaction.channel.name, handlerDirection interaction)
+      | _ => none
 
 /-! ### Prover-data reads
 
@@ -315,7 +328,8 @@ def validateDataReads (components : List (Component F)) (generations : List (Gen
                   preallocated.rows.toNat do
                 throw (.paddedDataRead component.circuit.name operationIndex read.key)
 
-/-- Check that no two components handle demand of the same channel and direction. -/
+/-- Reject duplicate unconditional routes. Message-dependent routes are checked for uniqueness
+when a demand is handled; no disjointness claim is inferred from their predicates. -/
 def validateHandlers (components : List (Component F)) (generations : List (Generation F)) :
     Except ConfigError Unit := do
   let handled := (components.zip generations).flatMap fun (component, generation) =>
@@ -484,27 +498,33 @@ def initialInputs (state : ComponentState F) (hint : ProverHint F) : List (Array
 
 /-! ### Handling demand -/
 
-def PreallocatedHandler.handles (state : ComponentState F) (handler : PreallocatedHandler)
+/-- Routing has no access to private hints or committed data. -/
+def messageContext (message : Array F) : Witgen.Ctx F where
+  env := { get := fun index => message[index]?.getD 0, data := fun _ _ => #[], hint := .empty F }
+
+def PreallocatedHandler.handles (state : ComponentState F) (handler : PreallocatedHandler F)
     (demand : Demand F) : Bool :=
   match state.interactions[handler.interaction]? with
   | none => false
   | some interaction =>
       interaction.channel.name == demand.channel &&
-        handlerDirection interaction == demand.direction
+        handlerDirection interaction == demand.direction &&
+        handler.predicate.eval (messageContext demand.message)
 
 def ComponentState.handles (state : ComponentState F) (demand : Demand F) : Bool :=
   match state.generation.mode with
-  | .demand mode => mode.channel.name == demand.channel && mode.direction == demand.direction
+  | .demand mode => mode.channel.name == demand.channel && mode.direction == demand.direction &&
+      mode.predicate.eval (messageContext demand.message)
   | .preallocated mode => mode.handlers.any fun handler => handler.handles state demand
 
-/-- The first demand some component handles, with that component's index. Validation ensures at most one component handles each channel and direction. -/
+/-- The first handled demand and every matching component; the caller rejects ambiguity. -/
 def findAction (states : List (ComponentState F)) :
-    List (Demand F) → Option (Demand F × ℕ)
+    List (Demand F) → Option (Demand F × List ℕ)
   | [] => none
   | demand :: demands =>
-      match states.findIdx? (·.handles demand) with
-      | some index => some (demand, index)
-      | none => findAction states demands
+      let indices := states.zipIdx.filterMap fun (state, index) =>
+        if state.handles demand then some index else none
+      if indices.isEmpty then findAction states demands else some (demand, indices)
 
 def sameOrigin (origin : Origin F) (mode : DemandMode F) (demand : Demand F) : Bool :=
   origin.channel == mode.channel.name && origin.direction == mode.direction &&
@@ -548,19 +568,30 @@ def handleDemand (state : ComponentState F) (mode : DemandMode F)
             removedRows := [row]
             addedRows := [updated] }
 
-/-- The first preallocated row whose handled interaction carries the demanded message. -/
-def findPreallocatedRow (state : ComponentState F) (handlers : List PreallocatedHandler)
+/-- Select a unique complete-key match. Direct indices can select a physical duplicate;
+without an index, repeated matching rows remain ambiguous. -/
+def findPreallocatedRow (state : ComponentState F) (handlers : List (PreallocatedHandler F))
     (demand : Demand F) (data : ProverData F) :
-    Option (PreallocatedHandler × ℕ × GeneratedRow F) :=
-  handlers.findSome? fun handler =>
+    Option (PreallocatedHandler F × ℕ × GeneratedRow F) :=
+  let candidates := handlers.flatMap fun handler =>
     if handler.handles state demand then
-      state.rows.zipIdx.findSome? fun (row, rowIndex) =>
+      let rows := match handler.rowIndex with
+        | none => state.rows.zipIdx
+        | some index =>
+            let rowIndex := (index.eval (messageContext demand.message)).toNat
+            match state.rows[rowIndex]? with
+            | none => []
+            | some row => [(row, rowIndex)]
+      rows.filterMap fun (row, rowIndex) =>
         state.interactions[handler.interaction]?.bind fun abstract =>
           let interaction := abstract.eval (Environment.fromArray row.values data)
           if interaction.msg == demand.message then some (handler, rowIndex, row) else none
-    else none
+    else []
+  match candidates with
+  | [found] => some found
+  | _ => none
 
-def handlePreallocated (state : ComponentState F) (handlers : List PreallocatedHandler)
+def handlePreallocated (state : ComponentState F) (handlers : List (PreallocatedHandler F))
     (demand : Demand F) (data : ProverData F) (hint : ProverHint F) : Option (Mutation F) :=
   match findPreallocatedRow state handlers demand data with
   | none => none
@@ -578,6 +609,7 @@ inductive GenerationError where
   | config (error : ConfigError)
   | unhandledImbalance (channels : List String)
   | noPreallocatedRow (component channel : String)
+  | ambiguousHandlers (channel : String)
   | fuelExhausted
   | assembly (message : String)
 deriving Repr
@@ -588,7 +620,8 @@ instance : ToString GenerationError where
     | .unhandledImbalance channels =>
         s!"unhandled channel imbalance on: {String.intercalate ", " channels}"
     | .noPreallocatedRow component channel =>
-        s!"component '{component}' has no preallocated row for a message on channel '{channel}'"
+        s!"component '{component}' has no unique preallocated row for a message on channel '{channel}'"
+    | .ambiguousHandlers channel => s!"multiple generation handlers match channel '{channel}'"
     | .fuelExhausted => "ensemble witness generation exhausted its fuel"
     | .assembly message => message
 
@@ -617,9 +650,10 @@ def generateLoop (data : ProverData F) (hint : ProverHint F) :
       if demands.isEmpty then pure states else
       match findAction states demands with
       | none => throw (.unhandledImbalance (demands.map (·.channel)))
-      | some (demand, index) => do
+      | some (demand, [index]) => do
           let (states, update) ← handle states demand index data hint
           generateLoop data hint fuel states (update demands)
+      | some (demand, _) => throw (.ambiguousHandlers demand.channel)
 
 /-- Pad every component to its target height with its padding row; returns the padded states and the interactions of the new rows. -/
 def padTables (data : ProverData F) (hint : ProverHint F) (states : List (ComponentState F)) :

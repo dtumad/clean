@@ -190,13 +190,16 @@ def aggregationToRust : Aggregation → String
   | .perOccurrence => "Aggregation::PerOccurrence"
   | .byMessage => "Aggregation::ByMessage"
 
-def handlerToRust (handler : HandlerProgram) : String :=
-  s!"PreallocatedHandler \{ channel: {quoted handler.channel}, direction: {directionToRust handler.direction}, interaction: {handler.interaction}, column: {handler.column} }"
+def handlerToRust (handler : HandlerProgram F) : String :=
+  let rowIndex := match handler.rowIndex with
+    | none => "None"
+    | some index => s!"Some(|row: &[F]| \{ let row_index = 0u64; {u64exprToRust false index} })"
+  s!"PreallocatedHandler \{ channel: {quoted handler.channel}, direction: {directionToRust handler.direction}, interaction: {handler.interaction}, column: {handler.column}, predicate: |row: &[F]| \{ let row_index = 0u64; {bexprToRust false handler.predicate} }, row_index: {rowIndex} }"
 
 /-- `fn mode()`, and `fn initial_row(row_index, hint)`, which for preallocated components is the fixed prefix followed by the row program's values. -/
 def modeToRust : ModeProgram F → String
   | .demand mode => s!"pub fn mode<F: WitnessField>() -> Mode<F> \{
-    Mode::Demand(DemandMode \{ channel: {quoted mode.channel.name}, direction: {directionToRust mode.direction}, aggregation: {aggregationToRust mode.aggregation}, input: vec![{commaSep (mode.input.cells.map inputCellToRust)}] })
+    Mode::Demand(DemandMode \{ channel: {quoted mode.channel.name}, direction: {directionToRust mode.direction}, aggregation: {aggregationToRust mode.aggregation}, input: vec![{commaSep (mode.input.cells.map inputCellToRust)}], predicate: |row: &[F]| \{ let row_index = 0u64; {bexprToRust false mode.predicate} } })
 }
 
 pub fn initial_row<F: WitnessField>(_row_index: u64, _hint: &WitnessData<F>) -> Vec<F> \{
