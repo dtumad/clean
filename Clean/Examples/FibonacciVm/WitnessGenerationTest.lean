@@ -95,6 +95,35 @@ def emptyDynamicResult : Except String (List ℕ × Bool × Bool) := do
 
 example : emptyDynamicResult = .ok ([0, 0, 256], true, true) := by native_decide
 
+/-- Fixed inventories retain the exporter's positive-height requirement. -/
+def emptyFixedRejected : Bool :=
+  let component := bytesComponent (p := pBabybear)
+  match hfixed : component.fixedColumns with
+  | none => false
+  | some fixed =>
+    match validateGeneration {
+      component with
+      fixedColumns := some { fixed with height := 0 }
+      Assumptions := component.circuit.Assumptions
+      circuit_assumptions_of_assumptions := by intros; assumption
+      fixed_width_le_input := by
+        have h := component.fixed_width_le_input
+        rw [hfixed] at h
+        exact h
+    } {
+      mode := .preallocated {
+        rows := 0
+        input := .ofFExprs #v[.const 0]
+        input_valid := by rfl
+        handlers := []
+      }
+      padding := { input := #[0, 0], minimumRows := 0 }
+    } with
+    | .error (.emptyFixed _) => true
+    | _ => false
+
+example : emptyFixedRejected = true := by native_decide
+
 def invalidPublicInput : fieldTriple (F pBabybear) := (10, 42, 42)
 
 def invalidRejected : Bool :=

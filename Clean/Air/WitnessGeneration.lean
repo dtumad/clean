@@ -112,6 +112,7 @@ inductive ConfigError where
   | missingComponent (name : String)
   | duplicateComponent (name : String)
   | fixedDemandMode (component : String)
+  | emptyFixed (component : String)
   | demandInputWidth (component : String) (expected actual : ℕ)
   | demandMessageIndex (component : String) (index arity : ℕ)
   | preallocatedRows (component : String) (expected actual : ℕ)
@@ -138,6 +139,8 @@ instance : ToString ConfigError where
     | .duplicateComponent name => s!"component '{name}' has multiple generation configs"
     | .fixedDemandMode component =>
         s!"fixed-column component '{component}' must use preallocated generation"
+    | .emptyFixed component =>
+        s!"fixed-column component '{component}' must have positive height"
     | .demandInputWidth component expected actual =>
         s!"demand input template of component '{component}' has width {actual}, expected {expected}"
     | .demandMessageIndex component index arity =>
@@ -285,6 +288,8 @@ def validateGeneration (component : Component F) (generation : Generation F) :
   | none, _ => pure ()
   | some _, .demand _ => throw (.fixedDemandMode name)
   | some fixed, .preallocated preallocated =>
+      unless fixed.height != 0 do
+        throw (.emptyFixed name)
       unless preallocated.rows = fixed.height do
         throw (.preallocatedRows name fixed.height.toNat preallocated.rows.toNat)
       let paddedHeight := generation.padding.targetHeight fixed.height.toNat

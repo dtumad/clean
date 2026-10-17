@@ -26,6 +26,9 @@ pub enum EnsembleShapeError {
     },
     NoComponents,
     NoActiveComponents,
+    EmptyFixedTrace {
+        component: usize,
+    },
     MetadataCount {
         metadata: &'static str,
         expected: usize,
@@ -165,6 +168,9 @@ impl<F: WitnessField, P: GeneratedAirSpec> GeneratedEnsemble<F, P> {
                     });
                 }
                 let fixed_height = P::FIXED_HEIGHTS[component];
+                if P::FIXED_WIDTHS[component] != 0 && fixed_height == 0 {
+                    return Err(EnsembleShapeError::EmptyFixedTrace { component });
+                }
                 if fixed_height != 0 && fixed_height != trace_height {
                     return Err(EnsembleShapeError::FixedTraceHeight {
                         component,

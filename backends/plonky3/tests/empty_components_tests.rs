@@ -15,13 +15,13 @@ use p3_matrix::Matrix;
 
 /// Distinct AIRs on either side of an empty slot expose accidental index compression.
 #[derive(Clone)]
-struct Sparse;
+struct Sparse<const EMPTY_FIXED: bool = false>;
 
-impl GeneratedAirSpec for Sparse {
+impl<const EMPTY_FIXED: bool> GeneratedAirSpec for Sparse<EMPTY_FIXED> {
     const FIELD_ORDER: u64 = 2013265921;
     const PUBLIC_VALUES: usize = 3;
     const WIDTHS: &'static [usize] = &[1, 1, 1];
-    const FIXED_WIDTHS: &'static [usize] = &[0, 0, 0];
+    const FIXED_WIDTHS: &'static [usize] = &[if EMPTY_FIXED { 1 } else { 0 }, 0, 0];
     const FIXED_HEIGHTS: &'static [usize] = &[0, 0, 0];
     const INTERACTIONS_PER_ROW: &'static [usize] = &[1, 1, 1];
     const VERIFIER_INTERACTIONS: usize = 3;
@@ -181,6 +181,12 @@ fn empty_middle_component_preserves_generation_and_proof_indices() {
 
 #[test]
 fn empty_batch_and_non_power_of_two_heights_are_rejected() {
+    for first in [0, 8] {
+        assert!(matches!(
+            GeneratedEnsemble::<BabyBear, Sparse<true>>::new(&[first, 0, 16]),
+            Err(EnsembleShapeError::EmptyFixedTrace { component: 0 })
+        ));
+    }
     assert!(matches!(
         GeneratedEnsemble::<BabyBear, Sparse>::new(&[0, 0, 0]),
         Err(EnsembleShapeError::NoActiveComponents)
