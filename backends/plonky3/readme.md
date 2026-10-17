@@ -7,7 +7,7 @@ This crate proves channel-based Clean AIR ensembles with Plonky3.
 3. The `ensemble!` macro (`src/ensemble_macro.rs`) implements the crate's witness generation and AIR traits on top of the component modules.
 4. `src/witness_generation.rs` runs the generated channel worklist and constructs all component traces without invoking Lean, building preallocated rows from the generated row functions. Lean's witness configuration supplies semantic padding rows; the worklist executes them and balances any interactions they create until every trace has a power-of-two height.
 5. `src/generated_air.rs` supplies the shared Plonky3 `Air` implementation, builds fixed traces from the generated fixed-row functions, and registers the generated channel interactions as lookups.
-6. `src/ensemble_prover.rs` proves or verifies an opaque generated statement containing every component AIR exactly once in canonical order. Verifier-only interactions are derived from public inputs and enter the global channel argument directly, without a synthetic verifier AIR or trace.
+6. `src/ensemble_prover.rs` proves or verifies an opaque generated statement retaining every component's height and using each nonempty AIR exactly once in canonical order. Verifier-only interactions are derived from public inputs and enter the global channel argument directly, without a synthetic verifier AIR or trace.
 
 Statement construction binds component trace heights, exact fixed heights, and the complete component inventory. It also checks the Clean channel-soundness side condition `verifier interactions + Σ(trace height × interactions per row) < field order` before proving or verification. Individual component AIRs cannot be assembled through the public API.
 
@@ -47,3 +47,13 @@ The generated ensemble path takes the public input and the flattened private inp
 Generation handlers may filter messages with the existing witness IR. Multiple matching components are rejected at runtime. A preallocated handler may also compute a physical row index from the message; the scheduler still checks its bounds and the complete interaction key. Without an index, multiple matching physical rows are rejected. The Fibonacci byte provider exercises indexed generation through the Lean reference builder and generated Rust. These configuration extensions are a temporary downstream patch until upstream provides equivalent routing.
 
 The downstream backend also skips zero-multiplicity updates to its nonzero pending-demand worklist. Physical rows and their complete interaction lists retain those occurrences. This avoids scanning the worklist for every unused fixed-table entry; remove the patch when upstream adopts an equivalent fast path.
+
+Setting a component's minimum rows to zero preserves an empty table in both Lean and
+Rust generation. Nonempty tables still round up to a power of two. Witnesses and
+statements retain every component's index, width and height; the backend sends only
+nonempty tables to Plonky3. Fixed tables must retain their declared heights, and all
+verifier interactions and occurrence-count checks remain in force. At least one table
+must be nonempty because the batch PCS does not support an empty batch. This extension
+changes the canonical scheduler and backend APIs; remove the downstream patch when
+upstream provides equivalent support. It does not supply neutral padding for active
+tables whose row counts are not powers of two.
