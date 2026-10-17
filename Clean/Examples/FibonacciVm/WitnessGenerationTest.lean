@@ -82,6 +82,19 @@ def repeatedResult : Except String (List ℕ × Bool × Bool) :=
 /-- Repeated addition pulls coalesce after the period of Fibonacci modulo 256. -/
 example : repeatedResult = .ok ([512, 512, 256], true, true) := by native_decide
 
+/-- Zero minimum rows preserve empty dynamic tables without changing fixed inventory. -/
+def emptyDynamicResult : Except String (List ℕ × Bool × Bool) := do
+  let config := FibonacciWitness.config (p := pBabybear) 20
+  let config := { config with components := config.components.map fun (name, generation) =>
+    (name, { generation with padding := { generation.padding with minimumRows := 0 } }) }
+  match Air.Flat.WitnessGeneration.generate (fibonacciEnsemble (p := pBabybear))
+      config (0, 0, 1) () with
+  | .error error => .error (toString error)
+  | .ok witness => .ok (
+      witness.tables.map (·.length), constraintsHold witness, channelsBalanced witness)
+
+example : emptyDynamicResult = .ok ([0, 0, 256], true, true) := by native_decide
+
 def invalidPublicInput : fieldTriple (F pBabybear) := (10, 42, 42)
 
 def invalidRejected : Bool :=

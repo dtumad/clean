@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use p3_air::{Air, BaseAir};
+use p3_air::Air;
 #[cfg(all(debug_assertions, not(doc)))]
 use p3_batch_stark::DebugConstraintBuilderWithLookups;
 use p3_batch_stark::{
@@ -99,9 +99,9 @@ where
 {
     let airs = ensemble.airs();
     let trace_heights = ensemble.trace_heights();
-    if airs.len() != traces.len() {
+    if ensemble.component_count() != traces.len() {
         return Err(EnsembleShapeError::TraceCount {
-            expected: airs.len(),
+            expected: ensemble.component_count(),
             actual: traces.len(),
         });
     }
@@ -112,15 +112,15 @@ where
             actual: public_values.len(),
         });
     }
-    for (component, (air, trace)) in airs.iter().zip(&traces).enumerate() {
-        if air.width() != trace.width() {
+    for (component, trace) in traces.iter().enumerate() {
+        if P::WIDTHS[component] != trace.width() {
             return Err(EnsembleShapeError::TraceWidth {
                 component,
-                expected: air.width(),
+                expected: P::WIDTHS[component],
                 actual: trace.width(),
             });
         }
-        if trace.height() == 0 || !trace.height().is_power_of_two() {
+        if trace.height() != 0 && !trace.height().is_power_of_two() {
             return Err(EnsembleShapeError::TraceHeight {
                 component,
                 height: trace.height(),
@@ -134,6 +134,10 @@ where
             });
         }
     }
+    let traces = traces
+        .into_iter()
+        .filter(|trace| trace.height() != 0)
+        .collect::<Vec<_>>();
     let log_degrees = traces
         .iter()
         .map(|trace| log2_strict_usize(trace.height()) + config.is_zk())
@@ -186,6 +190,7 @@ where
     }
     let expected_degree_bits = trace_heights
         .iter()
+        .filter(|height| **height != 0)
         .map(|height| log2_strict_usize(*height) + config.is_zk())
         .collect::<Vec<_>>();
     if proof.degree_bits != expected_degree_bits {

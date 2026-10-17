@@ -250,24 +250,30 @@ pub struct Interaction<F> {
 #[derive(Clone, Debug)]
 pub struct EnsembleWitness<F> {
     fixed_widths: Vec<usize>,
+    row_widths: Vec<usize>,
     pub tables: Vec<Vec<Vec<F>>>,
 }
 
 impl<F: Field> EnsembleWitness<F> {
     /// Convert already-padded semantic tables to Plonky3 trace matrices.
     pub fn into_traces(self) -> Result<Vec<RowMajorMatrix<F>>, String> {
+        if self.tables.len() != self.row_widths.len()
+            || self.tables.len() != self.fixed_widths.len()
+        {
+            return Err("witness table count differs from its component metadata".to_string());
+        }
         self.tables
             .into_iter()
             .zip(self.fixed_widths)
+            .zip(self.row_widths)
             .enumerate()
-            .map(|(component, (rows, fixed_width))| {
-                if rows.is_empty() || !rows.len().is_power_of_two() {
+            .map(|(component, ((rows, fixed_width), semantic_width))| {
+                if !rows.is_empty() && !rows.len().is_power_of_two() {
                     return Err(format!(
                         "component {component} has non-power-of-two height {}",
                         rows.len()
                     ));
                 }
-                let semantic_width = rows[0].len();
                 let width = semantic_width.checked_sub(fixed_width).ok_or_else(|| {
                     format!("component {component} fixed width exceeds its semantic row width")
                 })?;
@@ -297,6 +303,8 @@ pub trait Program<F: WitnessField> {
     const PROVER_INPUTS: usize;
     const HINT_TABLES: &'static [HintTable];
     const FIXED_WIDTHS: &'static [usize];
+    /// Complete semantic widths, including fixed columns, also for empty tables.
+    const ROW_WIDTHS: &'static [usize];
     const COMPONENT_NAMES: &'static [&'static str];
 
     fn modes() -> Vec<Mode<F>>;
@@ -671,10 +679,12 @@ fn balance<F: WitnessField, P: Program<F>>(
 }
 
 fn target_height<F>(row_count: usize, padding: &Padding<F>) -> usize {
-    row_count
-        .max(padding.minimum_rows)
-        .max(1)
-        .next_power_of_two()
+    let minimum = row_count.max(padding.minimum_rows);
+    if minimum == 0 {
+        0
+    } else {
+        minimum.next_power_of_two()
+    }
 }
 
 fn pad_and_balance<F: WitnessField, P: Program<F>>(
@@ -745,6 +755,14 @@ pub fn generate<F: WitnessField, P: Program<F>>(
         return Err(format!(
             "fixed-width count {} does not match component count {}",
             P::FIXED_WIDTHS.len(),
+            P::COMPONENTS
+        )
+        .into());
+    }
+    if P::ROW_WIDTHS.len() != P::COMPONENTS {
+        return Err(format!(
+            "row-width count {} does not match component count {}",
+            P::ROW_WIDTHS.len(),
             P::COMPONENTS
         )
         .into());
@@ -833,6 +851,7 @@ pub fn generate<F: WitnessField, P: Program<F>>(
 
     Ok(EnsembleWitness {
         fixed_widths: P::FIXED_WIDTHS.to_vec(),
+        row_widths: P::ROW_WIDTHS.to_vec(),
         tables: tables
             .into_iter()
             .map(|table| table.into_iter().map(|row| row.values).collect())
@@ -876,6 +895,7 @@ mod routing_tests {
         const PUBLIC_INPUTS: usize = 1;
         const PROVER_INPUTS: usize = 0;
         const FIXED_WIDTHS: &'static [usize] = &[1];
+        const ROW_WIDTHS: &'static [usize] = &[2];
         const COMPONENT_NAMES: &'static [&'static str] = &["duplicates"];
         fn modes() -> Vec<Mode<F>> {
             vec![Mode::Preallocated {

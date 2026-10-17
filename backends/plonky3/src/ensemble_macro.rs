@@ -29,6 +29,7 @@ macro_rules! ensemble {
             const PROVER_INPUTS: usize = $prover_inputs;
             const HINT_TABLES: &'static [$crate::witness_generation::HintTable] = &[$($hint_table),*];
             const FIXED_WIDTHS: &'static [usize] = &[$($component::FIXED_WIDTH),+];
+            const ROW_WIDTHS: &'static [usize] = &[$($component::WIDTH),+];
             const COMPONENT_NAMES: &'static [&'static str] = &[$($component::NAME),+];
 
             fn modes() -> $crate::__private::Vec<$crate::witness_generation::Mode<F>> {

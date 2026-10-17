@@ -93,6 +93,7 @@ inductive Mode (F : Type) where
 /-- A semantic row used to extend one component to a power-of-two trace height. -/
 structure Padding (F : Type) where
   input : Array F
+  /-- Zero preserves empty tables; nonempty tables still round up to a power of two. -/
   minimumRows : UInt64 := 1
 
 /-- How the generator builds the rows of one component. -/
@@ -269,7 +270,8 @@ def nextPowerOfTwo (value : ℕ) : ℕ :=
   nextPowerOfTwoAux (max value 1) value 1
 
 def Padding.targetHeight (padding : Padding F) (rowCount : ℕ) : ℕ :=
-  nextPowerOfTwo (max rowCount padding.minimumRows.toNat)
+  let minimum := max rowCount padding.minimumRows.toNat
+  if minimum = 0 then 0 else nextPowerOfTwo minimum
 
 /-- Check one component's generation mode and padding against the component. -/
 def validateGeneration (component : Component F) (generation : Generation F) :

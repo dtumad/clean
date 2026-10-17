@@ -8,8 +8,7 @@ use core::marker::PhantomData;
 
 use p3_air::lookup::{Direction as LookupDirection, Kind, Lookup};
 use p3_air::{
-    Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PermutationAirBuilder,
-    SymbolicExpression,
+    Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PermutationAirBuilder, SymbolicExpression,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -26,6 +25,7 @@ pub enum EnsembleShapeError {
         actual: u64,
     },
     NoComponents,
+    NoActiveComponents,
     MetadataCount {
         metadata: &'static str,
         expected: usize,
@@ -108,9 +108,12 @@ pub struct GeneratedAir<P> {
     _program: PhantomData<P>,
 }
 
-/// A complete generated Clean statement with its AIR components in canonical order.
+/// A complete generated Clean statement with its nonempty AIR components in canonical order.
 ///
-/// The component AIRs are private so callers cannot omit, duplicate, or reorder them. Construction also establishes the interaction-count side condition required by Clean's channel semantics.
+/// Every component retains its indexed height, including zero-height mutable tables.
+/// Only nonempty components become Plonky3 instances; fixed tables cannot be omitted.
+/// The AIRs are private so callers cannot omit, duplicate, or reorder active components.
+/// Construction also establishes Clean's interaction-count side condition.
 #[derive(Clone, Debug)]
 pub struct GeneratedEnsemble<F, P> {
     airs: Vec<GeneratedAir<P>>,
@@ -155,7 +158,7 @@ impl<F: WitnessField, P: GeneratedAirSpec> GeneratedEnsemble<F, P> {
             .copied()
             .enumerate()
             .map(|(component, trace_height)| {
-                if trace_height == 0 || !trace_height.is_power_of_two() {
+                if trace_height != 0 && !trace_height.is_power_of_two() {
                     return Err(EnsembleShapeError::TraceHeight {
                         component,
                         height: trace_height,
@@ -169,13 +172,20 @@ impl<F: WitnessField, P: GeneratedAirSpec> GeneratedEnsemble<F, P> {
                         actual: trace_height,
                     });
                 }
-                Ok(GeneratedAir {
+                Ok((trace_height != 0).then_some(GeneratedAir {
                     component,
                     num_lookups: 0,
                     _program: PhantomData,
-                })
+                }))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        // Plonky3's batch PCS requires at least one nonempty trace.
+        if airs.is_empty() {
+            return Err(EnsembleShapeError::NoActiveComponents);
+        }
 
         let interactions = trace_heights
             .iter()
@@ -212,7 +222,7 @@ impl<F: WitnessField, P: GeneratedAirSpec> GeneratedEnsemble<F, P> {
     }
 
     pub fn component_count(&self) -> usize {
-        self.airs.len()
+        self.trace_heights.len()
     }
 
     pub fn interaction_count(&self) -> u128 {

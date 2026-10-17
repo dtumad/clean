@@ -148,6 +148,15 @@ fn ensemble_api_reports_shape_errors() {
         })
     ));
     let mut wrong_fixed_height = trace_heights.clone();
+    wrong_fixed_height[2] = 0;
+    assert!(matches!(
+        generated::Statement::<BabyBear>::new(&wrong_fixed_height),
+        Err(EnsembleShapeError::FixedTraceHeight {
+            component: 2,
+            expected: 256,
+            actual: 0,
+        })
+    ));
     wrong_fixed_height[2] = 128;
     assert!(matches!(
         generated::Statement::<BabyBear>::new(&wrong_fixed_height),
@@ -195,6 +204,8 @@ impl<F: WitnessField> Program<F> for Minimum64Program {
         <generated::Ensemble as Program<F>>::HINT_TABLES;
     const FIXED_WIDTHS: &'static [usize] =
         <generated::Ensemble as Program<F>>::FIXED_WIDTHS;
+    const ROW_WIDTHS: &'static [usize] =
+        <generated::Ensemble as Program<F>>::ROW_WIDTHS;
     const COMPONENT_NAMES: &'static [&'static str] =
         <generated::Ensemble as Program<F>>::COMPONENT_NAMES;
 
